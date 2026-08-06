@@ -1,3 +1,6 @@
+<img width="1374" height="506" alt="grafik" src="https://github.com/user-attachments/assets/2badb923-1381-4d3f-ab44-bfcd7e749312" />
+
+
 # Quadratic Svelte
 
 A SvelteKit reimplementation of [Quadratic](https://github.com/quadratichq/quadratic) — the data-science spreadsheet with an infinite grid, formulas, and Python cells.
