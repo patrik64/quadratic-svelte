@@ -1,9 +1,12 @@
 // Central reactive app state — the Svelte-runes equivalent of Quadratic's
 // Recoil atoms (gridInteractionState, editorInteractionState, gridSettings).
 
+import { findSheetRefs } from './formulas/sheetRefs';
 import { Sheet } from './core/Sheet';
 import { SheetController } from './core/SheetController';
 import { updateCellAndDCells } from './core/updateCellAndDCells';
+import { formatCellValue } from './core/cellTextFormatter';
+import { measureWrapped } from './grid/pixi/measureText';
 import {
 	CELL_HEIGHT,
 	CELL_WIDTH,
@@ -11,9 +14,11 @@ import {
 	isCodeCellType,
 	type Cell,
 	type CellAlignment,
+	type CellBorders,
 	type CellFormat,
 	type CellTextFormat,
 	type CellType,
+	type CellWrapping,
 	type Coordinate
 } from './core/types';
 import {
@@ -52,6 +57,8 @@ function createState() {
 	let showGoToMenu = $state(false);
 	let showFileMenu = $state(false);
 	let showFormulaDocs = $state(false);
+	let showSearch = $state(false);
+	let searchAllSheets = $state(false);
 	let pendingEditorInsert = $state('');
 	let editorMode = $state<EditorMode>('PYTHON');
 	let editorCell = $state<Coordinate>({ x: 0, y: 0 });
@@ -61,7 +68,9 @@ function createState() {
 	let showGridAxes = $state(true);
 	let showGridLines = $state(true);
 	let showCellTypeOutlines = $state(true);
-	let showA1Notation = $state(false);
+	// letters on column headings by default, like the current original;
+	// View → "Show A1 notation" toggles back to raw numeric coordinates
+	let showA1Notation = $state(true);
 	let presentationMode = $state(false);
 
 	// ---- viewport (world coords of canvas top-left, scale) ----
@@ -149,6 +158,18 @@ function createState() {
 		},
 		set showFormulaDocs(v) {
 			showFormulaDocs = v;
+		},
+		get showSearch() {
+			return showSearch;
+		},
+		set showSearch(v) {
+			showSearch = v;
+		},
+		get searchAllSheets() {
+			return searchAllSheets;
+		},
+		set searchAllSheets(v) {
+			searchAllSheets = v;
 		},
 		get pendingEditorInsert() {
 			return pendingEditorInsert;
@@ -297,6 +318,7 @@ export async function commitCellValue(x: number, y: number, value: string): Prom
 			last_modified: new Date().toISOString()
 		};
 		await updateCellAndDCells({ starting_cells: [cell], sheetController });
+		if (sheet.getFormat(x, y)?.wrapping === 'wrap') autofitWrappedRows(x, y, x, y);
 	}
 	sheetController.endTransaction();
 }
@@ -381,6 +403,100 @@ export function toggleItalic(): void {
 
 export function setAlignment(alignment: CellAlignment | undefined): void {
 	setFormat({ alignment });
+}
+
+export type BorderMode =
+	| 'all'
+	| 'outer'
+	| 'inner'
+	| 'top'
+	| 'bottom'
+	| 'left'
+	| 'right'
+	| 'clear';
+
+function isEmptyFormat(format: CellFormat): boolean {
+	return Object.keys(format).every((k) => k === 'x' || k === 'y');
+}
+
+/** Applies borders over the selection. Each cell owns its four edges;
+ * `inner` uses top/left of non-first rows/columns so shared edges are
+ * stored once. */
+export function setBorders(mode: BorderMode, color = '#000000'): void {
+	const { x0, y0, x1, y1 } = getSelectionRect();
+	sheetController.startTransaction();
+	for (let y = y0; y <= y1; y++) {
+		for (let x = x0; x <= x1; x++) {
+			const existing = sheetController.sheet.getFormat(x, y) ?? { x, y };
+			const format: CellFormat = { ...existing, x, y };
+			if (mode === 'clear') {
+				if (!format.borders) continue;
+				delete format.borders;
+				sheetController.execute({
+					type: 'setFormat',
+					x,
+					y,
+					format: isEmptyFormat(format) ? undefined : format
+				});
+				continue;
+			}
+			const edges: CellBorders = { ...(format.borders ?? {}) };
+			if (mode === 'all' || ((mode === 'outer' || mode === 'top') && y === y0) || (mode === 'inner' && y > y0))
+				edges.top = color;
+			if (mode === 'all' || ((mode === 'outer' || mode === 'bottom') && y === y1)) edges.bottom = color;
+			if (mode === 'all' || ((mode === 'outer' || mode === 'left') && x === x0) || (mode === 'inner' && x > x0))
+				edges.left = color;
+			if (mode === 'all' || ((mode === 'outer' || mode === 'right') && x === x1)) edges.right = color;
+			if (Object.keys(edges).length === 0) continue;
+			format.borders = edges;
+			sheetController.execute({ type: 'setFormat', x, y, format });
+		}
+	}
+	sheetController.endTransaction();
+}
+
+const ROW_VERTICAL_PADDING = 4;
+
+/** Grows rows (never shrinks) so wrapped text in the rect is fully visible.
+ * Emits setHeading ops, so it must run inside an open transaction. */
+function autofitWrappedRows(x0: number, y0: number, x1: number, y1: number): void {
+	const sheet = sheetController.sheet;
+	for (let y = y0; y <= y1; y++) {
+		let needed = 0;
+		for (let x = x0; x <= x1; x++) {
+			const format = sheet.getFormat(x, y);
+			if (format?.wrapping !== 'wrap') continue;
+			const cell = sheet.getCell(x, y);
+			if (!cell) continue;
+			const displayText = formatCellValue(cell, format);
+			if (displayText === '') continue;
+			const colWidth = sheet.gridOffsets.getColumnWidth(x);
+			const { height } = measureWrapped(displayText, colWidth, {
+				bold: format.bold,
+				italic: format.italic
+			});
+			needed = Math.max(needed, height + ROW_VERTICAL_PADDING);
+		}
+		if (needed > sheet.gridOffsets.getRowHeight(y)) {
+			sheetController.execute({ type: 'setHeading', kind: 'row', id: y, size: Math.ceil(needed) });
+		}
+	}
+}
+
+export function setWrapping(wrapping: CellWrapping | undefined): void {
+	sheetController.startTransaction();
+	forEachSelectedCell((x, y) => {
+		const existing = sheetController.sheet.getFormat(x, y) ?? { x, y };
+		const format = { ...existing, x, y };
+		if (wrapping === undefined) delete (format as CellFormat).wrapping;
+		else format.wrapping = wrapping;
+		sheetController.execute({ type: 'setFormat', x, y, format });
+	});
+	if (wrapping === 'wrap') {
+		const { x0, y0, x1, y1 } = getSelectionRect();
+		autofitWrappedRows(x0, y0, x1, y1);
+	}
+	sheetController.endTransaction();
 }
 
 export function setTextFormat(textFormat: CellTextFormat | undefined): void {
@@ -822,6 +938,7 @@ export function saveFile(): void {
 export function openFileFromJSON(json: string, name?: string): void {
 	const parsed = JSON.parse(json);
 	importGridFile(sheetController, parsed);
+	sheetController.rebuildCrossSheetDeps(findSheetRefs);
 	app.filename = name?.replace(/\.grid$/, '') ?? parsed.filename ?? DEFAULT_FILE_NAME;
 	app.fileId = parsed.id ?? crypto.randomUUID();
 	app.cursorPosition = { x: 0, y: 0 };
@@ -856,6 +973,7 @@ export async function loadInitialFile(): Promise<void> {
 	if (saved) {
 		try {
 			importGridFile(sheetController, saved);
+			sheetController.rebuildCrossSheetDeps(findSheetRefs);
 			app.filename = saved.filename ?? DEFAULT_FILE_NAME;
 			app.fileId = saved.id ?? crypto.randomUUID();
 			app.markDirty();
@@ -914,3 +1032,123 @@ function seedExampleContent(): void {
 
 export const constants = { CELL_WIDTH, CELL_HEIGHT, HEADING_SIZE };
 export type { Cell, CellFormat, CellType, Coordinate };
+
+// ------------------------------------------------------------------ fill
+
+const TEXT_SERIES: string[][] = [
+	['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+	['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+	['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+	['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+];
+
+/** Continuation of `values` at 0-based `step` past the end, or undefined. */
+function seriesNext(values: string[], step: number): string | undefined {
+	// arithmetic series over numbers
+	if (values.length > 0 && values.every((v) => v.trim() !== '' && !Number.isNaN(Number(v)))) {
+		const nums = values.map(Number);
+		const delta = nums.length > 1 ? nums[1] - nums[0] : 0;
+		if (nums.every((n, i) => i === 0 || Math.abs(n - nums[i - 1] - delta) < 1e-9)) {
+			const value = nums[nums.length - 1] + delta * (step + 1);
+			return String(Math.abs(value) < 1e-12 ? 0 : parseFloat(value.toPrecision(13)));
+		}
+		return undefined;
+	}
+	// day/month name series (case of the first sample wins)
+	for (const series of TEXT_SERIES) {
+		const idx = values.map((v) => series.findIndex((s) => s.toLowerCase() === v.toLowerCase()));
+		if (idx.some((i) => i < 0)) continue;
+		const consecutive = idx.every((v, i) => i === 0 || v === (idx[i - 1] + 1) % series.length);
+		if (!consecutive) continue;
+		const next = series[(idx[idx.length - 1] + 1 + step) % series.length];
+		const sample = values[0];
+		if (sample === sample.toUpperCase()) return next.toUpperCase();
+		if (sample === sample.toLowerCase()) return next.toLowerCase();
+		return next;
+	}
+	return undefined;
+}
+
+/**
+ * Fills from a source rect into the adjacent target area along `axis`
+ * (down when 'y', right when 'x'): arithmetic/text series per line where
+ * detected, otherwise cycling copies with formula relocation.
+ */
+export async function fillRange(
+	source: { x0: number; y0: number; x1: number; y1: number },
+	extent: number,
+	axis: 'x' | 'y'
+): Promise<void> {
+	if (extent <= 0) return;
+	const sheet = sheetController.sheet;
+	const { relocateFormula } = await import('./formulas/runFormula');
+	const now = new Date().toISOString();
+	const cells: Cell[] = [];
+
+	const lines: { fixed: number }[] = [];
+	if (axis === 'y') for (let x = source.x0; x <= source.x1; x++) lines.push({ fixed: x });
+	else for (let y = source.y0; y <= source.y1; y++) lines.push({ fixed: y });
+
+	for (const line of lines) {
+		const sourceCells: (Cell | undefined)[] = [];
+		const s0 = axis === 'y' ? source.y0 : source.x0;
+		const s1 = axis === 'y' ? source.y1 : source.x1;
+		for (let i = s0; i <= s1; i++) {
+			sourceCells.push(axis === 'y' ? sheet.getCell(line.fixed, i) : sheet.getCell(i, line.fixed));
+		}
+		const n = sourceCells.length;
+		const allPlain = sourceCells.every(
+			(c) => c !== undefined && (c.type === 'TEXT' || c.type === 'COMPUTED')
+		);
+		const values = sourceCells.map((c) => c?.value ?? '');
+
+		for (let step = 0; step < extent; step++) {
+			const targetIndex = s1 + 1 + step;
+			const tx = axis === 'y' ? line.fixed : targetIndex;
+			const ty = axis === 'y' ? targetIndex : line.fixed;
+
+			const continued = allPlain ? seriesNext(values, step) : undefined;
+			if (continued !== undefined) {
+				cells.push({ x: tx, y: ty, type: 'TEXT', value: continued, last_modified: now });
+				continue;
+			}
+			// cycle-copy the source pattern
+			const src = sourceCells[step % n];
+			if (!src) continue;
+			const copy: Cell = { ...src, x: tx, y: ty, last_modified: now };
+			delete copy.array_cells;
+			delete copy.dependent_cells;
+			delete copy.evaluation_result;
+			if (copy.type === 'COMPUTED') copy.type = 'TEXT';
+			if (copy.type === 'FORMULA' && copy.formula_code) {
+				copy.formula_code = await relocateFormula(copy.formula_code, src, { x: tx, y: ty });
+			}
+			cells.push(copy);
+		}
+	}
+
+	if (cells.length === 0) return;
+	sheetController.startTransaction();
+	await updateCellAndDCells({ starting_cells: cells, sheetController });
+	sheetController.endTransaction();
+}
+
+/** ⌘D: fill the selection from its top row (single row: from the row above). */
+export async function fillDown(): Promise<void> {
+	const sel = getSelectionRect();
+	if (sel.y0 === sel.y1) {
+		await fillRange({ x0: sel.x0, y0: sel.y0 - 1, x1: sel.x1, y1: sel.y0 - 1 }, 1, 'y');
+	} else {
+		await fillRange({ x0: sel.x0, y0: sel.y0, x1: sel.x1, y1: sel.y0 }, sel.y1 - sel.y0, 'y');
+	}
+}
+
+/** ⌘R: fill the selection from its left column (single column: from the left). */
+export async function fillRight(): Promise<void> {
+	const sel = getSelectionRect();
+	if (sel.x0 === sel.x1) {
+		await fillRange({ x0: sel.x0 - 1, y0: sel.y0, x1: sel.x0 - 1, y1: sel.y1 }, 1, 'x');
+	} else {
+		await fillRange({ x0: sel.x0, y0: sel.y0, x1: sel.x0, y1: sel.y1 }, sel.x1 - sel.x0, 'x');
+	}
+}

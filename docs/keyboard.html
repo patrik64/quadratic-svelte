@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Keyboard shortcuts — Quadratic Svelte</title>
+<style>
+	:root {
+		--blue: #2463eb;
+		--ink: #1f2733;
+		--muted: #55606b;
+		--faint: #8a939c;
+		--line: #e6ebf0;
+		--panel: #f7f9fb;
+		--formula: #8c1a6a;
+	}
+	* { box-sizing: border-box; }
+	body {
+		margin: 0;
+		font: 15px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		color: var(--ink);
+		background: white;
+	}
+	.page {
+		max-width: 880px;
+		margin: 0 auto;
+		padding: 2.5rem 1.5rem 4rem;
+	}
+	header {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+		border-bottom: 3px solid var(--blue);
+		padding-bottom: 1rem;
+		margin-bottom: 1.5rem;
+	}
+	h1 { font-size: 1.6rem; margin: 0; }
+	h1 .app { color: var(--blue); }
+	.platform {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.8rem;
+		color: var(--muted);
+	}
+	.platform button {
+		font: inherit;
+		border: 1px solid #cfd7de;
+		background: white;
+		border-radius: 5px;
+		padding: 0.25rem 0.7rem;
+		cursor: pointer;
+		color: var(--muted);
+	}
+	.platform button.on {
+		background: var(--blue);
+		border-color: var(--blue);
+		color: white;
+	}
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+		gap: 1.25rem;
+	}
+	section {
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		overflow: hidden;
+		background: white;
+	}
+	section h2 {
+		margin: 0;
+		font-size: 0.72rem;
+		letter-spacing: 0.09em;
+		text-transform: uppercase;
+		color: var(--faint);
+		background: var(--panel);
+		border-bottom: 1px solid var(--line);
+		padding: 0.55rem 1rem;
+	}
+	table { width: 100%; border-collapse: collapse; }
+	td {
+		padding: 0.42rem 1rem;
+		border-top: 1px solid var(--line);
+		vertical-align: top;
+	}
+	tr:first-child td { border-top: none; }
+	td.keys { white-space: nowrap; width: 11rem; }
+	td.what { color: var(--muted); }
+	kbd {
+		display: inline-block;
+		min-width: 1.5em;
+		text-align: center;
+		font: 0.78rem/1.4 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+		color: var(--ink);
+		background: var(--panel);
+		border: 1px solid #cfd7de;
+		border-bottom-width: 2px;
+		border-radius: 4px;
+		padding: 0.05rem 0.35rem;
+		margin: 1px 0;
+	}
+	.or { color: var(--faint); font-size: 0.78rem; padding: 0 0.15rem; }
+	.note {
+		margin-top: 1.5rem;
+		font-size: 0.8rem;
+		color: var(--faint);
+	}
+	.note b { color: var(--muted); font-weight: 600; }
+	footer {
+		margin-top: 2rem;
+		padding-top: 1rem;
+		border-top: 1px solid var(--line);
+		font-size: 0.75rem;
+		color: var(--faint);
+	}
+	@media print {
+		.platform { display: none; }
+		.grid { grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+	}
+</style>
+</head>
+<body>
+<div class="page">
+	<header>
+		<h1><span class="app">Quadratic Svelte</span> — Keyboard shortcuts</h1>
+		<div class="platform">
+			Show keys for
+			<button id="btn-mac" onclick="setPlatform('mac')">macOS</button>
+			<button id="btn-win" onclick="setPlatform('win')">Windows / Linux</button>
+		</div>
+	</header>
+
+	<div class="grid">
+		<section>
+			<h2>Navigation</h2>
+			<table>
+				<tr><td class="keys"><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd></td><td class="what">Move the cursor</td></tr>
+				<tr><td class="keys"><kbd>⇧</kbd><kbd>arrows</kbd></td><td class="what">Extend the selection</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>arrows</kbd></td><td class="what">Jump to the edge of the content run (Excel-style)</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>⇧</kbd><kbd>arrows</kbd></td><td class="what">Extend the selection by content jumps</td></tr>
+				<tr><td class="keys"><kbd>Tab</kbd> <span class="or">/</span> <kbd>⇧</kbd><kbd>Tab</kbd></td><td class="what">Move right / left</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>A</kbd></td><td class="what">Select the used range</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>G</kbd> <span class="or">or</span> <kbd data-mod>⌘</kbd><kbd>J</kbd></td><td class="what">Go to cell / range</td></tr>
+				<tr><td class="keys"><kbd>Alt</kbd><kbd>→</kbd> <span class="or">/</span> <kbd>Alt</kbd><kbd>←</kbd></td><td class="what">Next / previous sheet (also <kbd>Alt</kbd><kbd>↑</kbd> / <kbd>Alt</kbd><kbd>↓</kbd>)</td></tr>
+			</table>
+		</section>
+
+		<section>
+			<h2>Editing</h2>
+			<table>
+				<tr><td class="keys"><kbd>Enter</kbd></td><td class="what">Edit the cell (opens the code editor on code cells)</td></tr>
+				<tr><td class="keys"><kbd>any character</kbd></td><td class="what">Start typing into the cell</td></tr>
+				<tr><td class="keys"><kbd>=</kbd></td><td class="what">On an empty cell: start a formula in the code editor</td></tr>
+				<tr><td class="keys"><kbd>/</kbd></td><td class="what">On an empty cell: choose a cell type (Python, JavaScript, Formula); on a code cell: open its editor</td></tr>
+				<tr><td class="keys"><kbd>Backspace</kbd> <span class="or">/</span> <kbd>Delete</kbd></td><td class="what">Clear the selected cells</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>Z</kbd></td><td class="what">Undo</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>⇧</kbd><kbd>Z</kbd> <span class="or">or</span> <kbd>Ctrl</kbd><kbd>Y</kbd></td><td class="what">Redo</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>D</kbd> <span class="or">/</span> <kbd data-mod>⌘</kbd><kbd>R</kbd></td><td class="what">Fill down / fill right (series-aware)</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>;</kbd> <span class="or">/</span> <kbd data-mod>⌘</kbd><kbd>⇧</kbd><kbd>;</kbd></td><td class="what">Insert today's date / date&nbsp;+&nbsp;time</td></tr>
+			</table>
+		</section>
+
+		<section>
+			<h2>Inline cell input</h2>
+			<table>
+				<tr><td class="keys"><kbd>Enter</kbd></td><td class="what">Commit and move down</td></tr>
+				<tr><td class="keys"><kbd>Tab</kbd> <span class="or">/</span> <kbd>⇧</kbd><kbd>Tab</kbd></td><td class="what">Commit and move right / left</td></tr>
+				<tr><td class="keys"><kbd>↑</kbd> <span class="or">/</span> <kbd>↓</kbd></td><td class="what">Commit and move up / down</td></tr>
+				<tr><td class="keys"><kbd>Esc</kbd></td><td class="what">Cancel the edit</td></tr>
+			</table>
+		</section>
+
+		<section>
+			<h2>Clipboard &amp; export</h2>
+			<table>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>C</kbd> <span class="or">/</span> <kbd data-mod>⌘</kbd><kbd>X</kbd> <span class="or">/</span> <kbd data-mod>⌘</kbd><kbd>V</kbd></td><td class="what">Copy / cut / paste (TSV, works with other apps)</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>⇧</kbd><kbd>C</kbd></td><td class="what">Copy the selection as a PNG image</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>⇧</kbd><kbd>E</kbd></td><td class="what">Download the selection as CSV</td></tr>
+			</table>
+		</section>
+
+		<section>
+			<h2>Formatting</h2>
+			<table>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>B</kbd></td><td class="what">Bold</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>I</kbd></td><td class="what">Italic</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>\</kbd></td><td class="what">Clear formatting</td></tr>
+			</table>
+		</section>
+
+		<section>
+			<h2>View &amp; zoom</h2>
+			<table>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>+</kbd> <span class="or">/</span> <kbd data-mod>⌘</kbd><kbd>−</kbd></td><td class="what">Zoom in / out</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>0</kbd></td><td class="what">Zoom to 100%</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>8</kbd></td><td class="what">Zoom to the selection</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>9</kbd></td><td class="what">Zoom to fit the used range</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>.</kbd></td><td class="what">Presentation mode (Esc leaves it)</td></tr>
+				<tr><td class="keys"><kbd>Space</kbd> + drag</td><td class="what">Pan the grid</td></tr>
+			</table>
+		</section>
+
+		<section>
+			<h2>Find</h2>
+			<table>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>F</kbd></td><td class="what">Find in the current sheet</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>⇧</kbd><kbd>F</kbd></td><td class="what">Find across all sheets</td></tr>
+				<tr><td class="keys"><kbd>Enter</kbd> <span class="or">/</span> <kbd>⇧</kbd><kbd>Enter</kbd></td><td class="what">Next / previous match</td></tr>
+				<tr><td class="keys"><kbd>Esc</kbd></td><td class="what">Close the search bar</td></tr>
+			</table>
+		</section>
+
+		<section>
+			<h2>Menus &amp; panels</h2>
+			<table>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>P</kbd> <span class="or">or</span> <kbd data-mod>⌘</kbd><kbd>K</kbd> <span class="or">or</span> <kbd data-mod>⌘</kbd><kbd>/</kbd></td><td class="what">Command palette (<kbd>↑</kbd><kbd>↓</kbd> select, <kbd>Enter</kbd> run)</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>O</kbd></td><td class="what">File menu with the examples gallery</td></tr>
+				<tr><td class="keys"><kbd>Esc</kbd></td><td class="what">Close the open dialog, menu, or panel</td></tr>
+			</table>
+		</section>
+
+		<section>
+			<h2>Code editor</h2>
+			<table>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>Enter</kbd></td><td class="what">Run the cell</td></tr>
+				<tr><td class="keys"><kbd data-mod>⌘</kbd><kbd>⇧</kbd><kbd>Enter</kbd></td><td class="what">Rerun all code cells (works anywhere)</td></tr>
+				<tr><td class="keys"><kbd>Tab</kbd></td><td class="what">Indent (4 spaces)</td></tr>
+				<tr><td class="keys"><kbd>Esc</kbd></td><td class="what">Close the editor</td></tr>
+			</table>
+		</section>
+
+		<section>
+			<h2>Formula autocomplete</h2>
+			<table>
+				<tr><td class="keys"><kbd>↑</kbd> <span class="or">/</span> <kbd>↓</kbd></td><td class="what">Choose a function (signature and docs preview follow)</td></tr>
+				<tr><td class="keys"><kbd>Tab</kbd> <span class="or">or</span> <kbd>Enter</kbd></td><td class="what">Insert it — the first argument placeholder is selected for type-over</td></tr>
+				<tr><td class="keys"><kbd>Esc</kbd></td><td class="what">Dismiss the list (the editor stays open)</td></tr>
+			</table>
+		</section>
+	</div>
+
+	<p class="note"><b>Note:</b> the grid uses 0-based coordinates — column A is 0 and row 0 exists. Cursor and selection are always shown in the bottom-left status bar; clicking it opens Go&nbsp;to.</p>
+
+	<footer>Quadratic Svelte — generated from <code>src/lib/grid/keyboard.ts</code> and the component key handlers.</footer>
+</div>
+
+<script>
+	function setPlatform(p) {
+		document.querySelectorAll('kbd[data-mod]').forEach(function (k) {
+			k.textContent = p === 'mac' ? '⌘' : 'Ctrl';
+		});
+		document.getElementById('btn-mac').classList.toggle('on', p === 'mac');
+		document.getElementById('btn-win').classList.toggle('on', p !== 'mac');
+	}
+	setPlatform(/Mac|iP(hone|ad|od)/.test(navigator.platform) ? 'mac' : 'win');
+</script>
+</body>
+</html>

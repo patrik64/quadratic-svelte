@@ -10,6 +10,8 @@
 		copySelection,
 		copySelectionAsPng,
 		downloadSelectionAsCsv,
+		fillDown,
+		fillRight,
 		importCSVAt,
 		insertTodayDate,
 		newFile,
@@ -19,7 +21,9 @@
 		rerunAllCode,
 		saveFile,
 		setAlignment,
+		setBorders,
 		setFormat,
+		setWrapping,
 		setTextFormat,
 		setZoom,
 		toggleBold,
@@ -40,6 +44,7 @@
 	let nameDraft = $state('');
 	let nameInput: HTMLInputElement | undefined = $state();
 	let csvInput: HTMLInputElement | undefined = $state();
+	let borderColor = $state('#000000');
 
 	const TEXT_COLORS = ['#000000', '#f25f5c', '#ffc800', '#8ecb89', '#3776ab', '#8c1a6a', '#5d576b', '#ffffff'];
 	const FILL_COLORS = ['#fde8e8', '#fff3cd', '#e2f0d9', '#e7f7ff', '#ece3f0', '#f6f8fa', '#ffffff'];
@@ -122,8 +127,24 @@
 				<span>Rerun all code</span><span class="shortcut">{C}{S}↵</span>
 			</button>
 			<div class="menu-divider"></div>
+			<button
+				class="menu-item"
+				onclick={() => {
+					app.searchAllSheets = false;
+					app.showSearch = true;
+				}}
+			>
+				<span>Find…</span><span class="shortcut">{C}F</span>
+			</button>
 			<button class="menu-item" onclick={() => (app.showGoToMenu = true)}>
 				<span>Go to cell</span><span class="shortcut">{C}G</span>
+			</button>
+			<div class="menu-divider"></div>
+			<button class="menu-item" onclick={() => void fillDown()}>
+				<span>Fill down</span><span class="shortcut">{C}D</span>
+			</button>
+			<button class="menu-item" onclick={() => void fillRight()}>
+				<span>Fill right</span><span class="shortcut">{C}R</span>
 			</button>
 		</DropdownMenu>
 
@@ -252,8 +273,33 @@
 			<button class="menu-item" onclick={() => setAlignment('right')}>Align right</button>
 			<div class="menu-divider"></div>
 			<div class="menu-header">Wrapping</div>
-			<button class="menu-item" onclick={() => setFormat({ wrapping: undefined })}>Overflow</button>
-			<button class="menu-item" onclick={() => setFormat({ wrapping: 'clip' })}>Clip</button>
+			<button class="menu-item" onclick={() => setWrapping(undefined)}>Overflow</button>
+			<button class="menu-item" onclick={() => setWrapping('wrap')}>Wrap</button>
+			<button class="menu-item" onclick={() => setWrapping('clip')}>Clip</button>
+			<div class="menu-divider"></div>
+			<div class="menu-header">Borders</div>
+			<div class="swatches">
+				{#each TEXT_COLORS as color (color)}
+					<button
+						class="swatch"
+						class:active={borderColor === color}
+						style:background={color}
+						aria-label="border color {color}"
+						onclick={(e) => {
+							e.stopPropagation(); // picking a color keeps the menu open
+							borderColor = color;
+						}}
+					></button>
+				{/each}
+			</div>
+			<button class="menu-item" onclick={() => setBorders('all', borderColor)}>All borders</button>
+			<button class="menu-item" onclick={() => setBorders('outer', borderColor)}>Outer borders</button>
+			<button class="menu-item" onclick={() => setBorders('inner', borderColor)}>Inner borders</button>
+			<button class="menu-item" onclick={() => setBorders('top', borderColor)}>Top border</button>
+			<button class="menu-item" onclick={() => setBorders('bottom', borderColor)}>Bottom border</button>
+			<button class="menu-item" onclick={() => setBorders('left', borderColor)}>Left border</button>
+			<button class="menu-item" onclick={() => setBorders('right', borderColor)}>Right border</button>
+			<button class="menu-item" onclick={() => setBorders('clear')}>Clear borders</button>
 			<div class="menu-divider"></div>
 			<button class="menu-item" onclick={clearFormatting}>
 				<span>Clear formatting</span><span class="shortcut">{C}\</span>
@@ -516,5 +562,9 @@
 		border-radius: 3px;
 		cursor: pointer;
 		padding: 0;
+	}
+	.swatch.active {
+		outline: 2px solid #2463eb;
+		outline-offset: 1px;
 	}
 </style>

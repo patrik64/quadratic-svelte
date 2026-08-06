@@ -322,6 +322,41 @@ pub fn adjust_formula(
     result
 }
 
+/// Rewrites a formula's A1 references for a copy from one cell to another
+/// (fill/paste semantics): relative references follow the copy offset,
+/// `$` absolute references stay put.
+#[wasm_bindgen]
+pub fn relocate_formula(
+    formula_string: &str,
+    old_x: f64,
+    old_y: f64,
+    new_x: f64,
+    new_y: f64,
+) -> String {
+    let old_base = Pos {
+        x: old_x as i64,
+        y: old_y as i64,
+    };
+    let new_base = Pos {
+        x: new_x as i64,
+        y: new_y as i64,
+    };
+
+    let mut refs = formulas::find_cell_references(formula_string, old_base);
+    refs.sort_by_key(|r| r.span.start);
+
+    let mut result = formula_string.to_string();
+    // relative coords are stored as offsets, so re-rendering the same
+    // RangeRef against the new base moves them; absolute coords ignore base
+    for r in refs.iter().rev() {
+        result.replace_range(
+            r.span.start as usize..r.span.end as usize,
+            &r.inner.a1_string(new_base),
+        );
+    }
+    result
+}
+
 /// Returns a column's name from its number.
 #[wasm_bindgen]
 pub fn column_name(n: f64) -> String {
@@ -336,6 +371,25 @@ pub fn column_from_name(s: &str) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_relocate_formula() {
+        // fill down by one row: relative refs follow, absolute stays
+        assert_eq!(
+            "SUM(B3:C3) + $B$0",
+            relocate_formula("SUM(B2:C2) + $B$0", 5.0, 2.0, 5.0, 3.0)
+        );
+        // fill right by two columns
+        assert_eq!(
+            "D0 * $A2",
+            relocate_formula("B0 * $A2", 3.0, 2.0, 5.0, 2.0)
+        );
+        // mixed absolute column, relative row
+        assert_eq!(
+            "$B3",
+            relocate_formula("$B1", 0.0, 1.0, 4.0, 3.0)
+        );
+    }
 
     #[test]
     fn test_adjust_formula() {

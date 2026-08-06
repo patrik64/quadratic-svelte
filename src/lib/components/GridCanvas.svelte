@@ -5,6 +5,7 @@
 	import { handleKeyDown } from '../grid/keyboard';
 	import {
 		app,
+		fillRange,
 		getSelectionRect,
 		gotoCell,
 		importCSVAt,
@@ -15,6 +16,7 @@
 	} from '../state.svelte';
 	import CellInput from './CellInput.svelte';
 	import GridContextMenu from './GridContextMenu.svelte';
+	import SearchBar from './SearchBar.svelte';
 
 	let containerEl: HTMLDivElement | undefined = $state();
 	let cursorStyle = $state('default');
@@ -23,9 +25,11 @@
 
 	let mouseIsDown = false;
 	let spaceHeld = false;
-	let dragMode: 'none' | 'select' | 'col-resize' | 'row-resize' = 'none';
+	let dragMode: 'none' | 'select' | 'col-resize' | 'row-resize' | 'fill' = 'none';
 	let resizeTarget = { index: 0, originalSize: 0, startWorld: 0 };
 	let selectOrigin: { x: number; y: number } | undefined;
+	let fillSource: { x0: number; y0: number; x1: number; y1: number } | undefined;
+	let fillPreview = $state<{ x0: number; y0: number; x1: number; y1: number } | undefined>();
 
 	function snapshot(): GridUIState {
 		return {
@@ -40,7 +44,8 @@
 			editorOpen: app.showCodeEditor,
 			editorMode: app.editorMode,
 			editorCell: app.editorCell,
-			inputOpen: app.showInput
+			inputOpen: app.showInput,
+			fillPreview
 		};
 	}
 
@@ -142,6 +147,16 @@
 		};
 	}
 
+	/** True when the screen point is over the fill handle (selection corner). */
+	function hitFillHandle(sx: number, sy: number): boolean {
+		const sel = getSelectionRect();
+		const offsets = sheetController.sheet.gridOffsets;
+		const rect = offsets.getCellRect(sel.x1, sel.y1);
+		const hx = (rect.x + rect.w - app.viewport.x) * app.viewport.scale;
+		const hy = (rect.y + rect.h - app.viewport.y) * app.viewport.scale;
+		return Math.abs(sx - hx) <= 6 && Math.abs(sy - hy) <= 6;
+	}
+
 	/** Which heading edge (if any) is near screen point, for resize cursors. */
 	function hitHeadingEdge(
 		sx: number,
@@ -229,6 +244,15 @@
 		const sx = e.clientX - rect.left;
 		const sy = e.clientY - rect.top;
 
+		// fill-handle drag
+		if (!app.showInput && hitFillHandle(sx, sy)) {
+			containerEl.setPointerCapture(e.pointerId);
+			fillSource = getSelectionRect();
+			fillPreview = { ...fillSource };
+			dragMode = 'fill';
+			return;
+		}
+
 		// heading interactions
 		const edge = hitHeadingEdge(sx, sy);
 		if (edge) {
@@ -309,6 +333,20 @@
 			app.markDirty();
 			return;
 		}
+		if (dragMode === 'fill' && fillSource) {
+			const cell = cellAtScreen(sx, sy);
+			// extend along the dominant axis only, never shrinking the source
+			const dy = cell.y - fillSource.y1;
+			const dx = cell.x - fillSource.x1;
+			if (dy >= dx && dy > 0) {
+				fillPreview = { ...fillSource, y1: cell.y };
+			} else if (dx > 0) {
+				fillPreview = { ...fillSource, x1: cell.x };
+			} else {
+				fillPreview = { ...fillSource };
+			}
+			return;
+		}
 		if (dragMode === 'select' && selectOrigin) {
 			const cell = cellAtScreen(sx, sy);
 			if (cell.x === selectOrigin.x && cell.y === selectOrigin.y) {
@@ -326,6 +364,7 @@
 		// hover cursor styling
 		if (app.panMode === 'enabled') cursorStyle = 'grab';
 		else if (app.panMode === 'dragging') cursorStyle = 'grabbing';
+		else if (!app.showInput && hitFillHandle(sx, sy)) cursorStyle = 'crosshair';
 		else {
 			const edge = hitHeadingEdge(sx, sy);
 			if (edge) cursorStyle = edge.kind === 'col' ? 'col-resize' : 'row-resize';
@@ -338,6 +377,29 @@
 	function onPointerUp(): void {
 		mouseIsDown = false;
 		if (app.panMode === 'dragging') app.panMode = spaceHeld ? 'enabled' : 'disabled';
+		if (dragMode === 'fill' && fillSource && fillPreview) {
+			const source = fillSource;
+			const preview = fillPreview;
+			fillSource = undefined;
+			fillPreview = undefined;
+			dragMode = 'none';
+			if (preview.y1 > source.y1) {
+				void fillRange(source, preview.y1 - source.y1, 'y').then(() => {
+					app.multiCursor = {
+						originPosition: { x: source.x0, y: source.y0 },
+						terminalPosition: { x: source.x1, y: preview.y1 }
+					};
+				});
+			} else if (preview.x1 > source.x1) {
+				void fillRange(source, preview.x1 - source.x1, 'x').then(() => {
+					app.multiCursor = {
+						originPosition: { x: source.x0, y: source.y0 },
+						terminalPosition: { x: preview.x1, y: source.y1 }
+					};
+				});
+			}
+			return;
+		}
 		if (dragMode === 'col-resize' || dragMode === 'row-resize') {
 			// re-apply through a transaction so resize is undoable
 			const offsets = sheetController.sheet.gridOffsets;
@@ -414,6 +476,9 @@
 >
 	{#if app.showInput}
 		<CellInput />
+	{/if}
+	{#if app.showSearch}
+		<SearchBar />
 	{/if}
 	{#if contextMenu}
 		<GridContextMenu

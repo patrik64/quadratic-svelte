@@ -3,8 +3,10 @@
 
 import init, {
 	adjust_formula,
+	relocate_formula,
 	eval_formula,
 	formula_docs,
+	provideCompletionItems,
 	hello
 } from '../../../quadratic-core/pkg/quadratic_core.js';
 import wasmUrl from '../../../quadratic-core/pkg/quadratic_core_bg.wasm?url';
@@ -36,7 +38,9 @@ export function loadFormulaCore(): Promise<void> {
 	return initPromise;
 }
 
-/** Rewrites A1 refs in a formula after a row/column shift (Rust core). */
+/** Rewrites A1 refs in a formula after a row/column shift (Rust core).
+ * Sheet-qualified refs are masked first — they point at another sheet, so
+ * this sheet's shifts must not rewrite them. */
 export async function adjustFormula(
 	code: string,
 	cell: { x: number; y: number },
@@ -45,7 +49,48 @@ export async function adjustFormula(
 	delta: number
 ): Promise<string> {
 	await loadFormulaCore();
-	return adjust_formula(code, cell.x, cell.y, axis === 'x', at, delta);
+	const { maskSheetRefs } = await import('./sheetRefs');
+	const { masked, unmask } = maskSheetRefs(code);
+	return unmask(adjust_formula(masked, cell.x, cell.y, axis === 'x', at, delta));
+}
+
+/** Rewrites A1 refs for a copy (fill/paste): relative follow, $ stays.
+ * Sheet-qualified refs are masked and kept verbatim (Excel keeps them
+ * pointing at the same foreign cells on copy). */
+export async function relocateFormula(
+	code: string,
+	from: { x: number; y: number },
+	to: { x: number; y: number }
+): Promise<string> {
+	await loadFormulaCore();
+	const { maskSheetRefs } = await import('./sheetRefs');
+	const { masked, unmask } = maskSheetRefs(code);
+	return unmask(relocate_formula(masked, from.x, from.y, to.x, to.y));
+}
+
+/** Monaco-shaped completion item from the core's LSP module. */
+export interface FormulaCompletion {
+	label: string;
+	detail?: string;
+	insertText?: string;
+	insertTextRules?: number;
+	documentation?: string | { value: string };
+	kind?: number;
+}
+
+let completionsCache: FormulaCompletion[] | undefined;
+
+/** Completion items for every formula function, from the Rust core's LSP
+ * module (the Monaco text-model arguments are unused by the core). */
+export async function getFormulaCompletions(): Promise<FormulaCompletion[]> {
+	if (!completionsCache) {
+		await loadFormulaCore();
+		const list = provideCompletionItems(undefined, undefined, undefined, undefined) as {
+			suggestions: FormulaCompletion[];
+		};
+		completionsCache = [...list.suggestions].sort((a, b) => a.label.localeCompare(b.label));
+	}
+	return completionsCache;
 }
 
 let docsCache: FormulaDoc[] | undefined;

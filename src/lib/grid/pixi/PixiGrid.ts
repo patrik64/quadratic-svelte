@@ -9,6 +9,7 @@ import type { Sheet } from '../../core/Sheet';
 import { coordKey, type Coordinate } from '../../core/types';
 import { colors, editorModeColor, gridLineAlpha } from '../colors';
 import { GridHeadings } from './GridHeadings';
+import { CELL_TEXT_MARGIN_LEFT, FONT_SIZE, measureWrapped } from './measureText';
 
 export interface GridUIState {
 	cursorPosition: Coordinate;
@@ -23,10 +24,9 @@ export interface GridUIState {
 	editorMode: 'FORMULA' | 'PYTHON' | 'JAVASCRIPT';
 	editorCell: Coordinate;
 	inputOpen: boolean;
+	fillPreview?: { x0: number; y0: number; x1: number; y1: number };
 }
 
-const FONT_SIZE = 14;
-const CELL_TEXT_MARGIN_LEFT = 3;
 const CULL_MARGIN_CELLS = 3;
 const MAX_VISIBLE_LABELS = 6000;
 // Text rasterization is the expensive step; cap creations per frame and
@@ -53,6 +53,7 @@ export class PixiGrid {
 	private fills = new Graphics();
 	private gridLines = new Graphics();
 	private axes = new Graphics();
+	private borders = new Graphics();
 	private outlines = new Graphics();
 	private labelLayer = new Container();
 	private selectionGfx = new Graphics();
@@ -97,6 +98,7 @@ export class PixiGrid {
 			this.fills,
 			this.gridLines,
 			this.axes,
+			this.borders, // above gridlines so cell borders paint over them
 			this.outlines,
 			this.labelLayer,
 			this.selectionGfx
@@ -306,15 +308,34 @@ export class PixiGrid {
 		this.labelsPending = false;
 		let creationBudget = LABEL_BUDGET_PER_FRAME;
 
-		// fills from formats
+		// fills + borders from formats
 		const fills = this.fills;
 		fills.clear();
+		const borders = this.borders;
+		borders.clear();
 		for (const format of this.getSheet().getAllFormats()) {
-			if (!format.fillColor) continue;
+			if (!format.fillColor && !format.borders) continue;
 			if (format.x < colStart || format.x > colEnd || format.y < rowStart || format.y > rowEnd)
 				continue;
 			const r = offsets.getCellRect(format.x, format.y);
-			fills.rect(r.x, r.y, r.w, r.h).fill(format.fillColor);
+			if (format.fillColor) fills.rect(r.x, r.y, r.w, r.h).fill(format.fillColor);
+			const b = format.borders;
+			if (b) {
+				if (b.top)
+					borders.moveTo(r.x, r.y).lineTo(r.x + r.w, r.y).stroke({ color: b.top, pixelLine: true });
+				if (b.bottom)
+					borders
+						.moveTo(r.x, r.y + r.h)
+						.lineTo(r.x + r.w, r.y + r.h)
+						.stroke({ color: b.bottom, pixelLine: true });
+				if (b.left)
+					borders.moveTo(r.x, r.y).lineTo(r.x, r.y + r.h).stroke({ color: b.left, pixelLine: true });
+				if (b.right)
+					borders
+						.moveTo(r.x + r.w, r.y)
+						.lineTo(r.x + r.w, r.y + r.h)
+						.stroke({ color: b.right, pixelLine: true });
+			}
 		}
 
 		// labels + code outlines
@@ -354,7 +375,11 @@ export class PixiGrid {
 
 			const key = coordKey(cell.x, cell.y);
 			const align = format?.alignment ?? 'left';
-			const sig = `${displayText}|${format?.bold ? 'b' : ''}${format?.italic ? 'i' : ''}|${format?.textColor ?? ''}|${align}|${format?.wrapping ?? ''}`;
+			const wrapping = format?.wrapping;
+			const r = offsets.getCellRect(cell.x, cell.y);
+			// wrapped layout depends on the cell's size, so resizes re-rasterize
+			const sizeSig = wrapping === 'wrap' ? `|${r.w}x${r.h}` : '';
+			const sig = `${displayText}|${format?.bold ? 'b' : ''}${format?.italic ? 'i' : ''}|${format?.textColor ?? ''}|${align}|${wrapping ?? ''}${sizeSig}`;
 			let cached = this.labelCache.get(key);
 			if (cached && cached.sig !== sig) {
 				cached.text.destroy();
@@ -368,22 +393,34 @@ export class PixiGrid {
 			}
 			if (!cached) {
 				creationBudget--;
-				const r = offsets.getCellRect(cell.x, cell.y);
+				let labelText = displayText;
+				if (wrapping === 'wrap') {
+					// pre-wrap into lines, keeping only what fits the row height
+					const m = measureWrapped(displayText, r.w, {
+						bold: format?.bold,
+						italic: format?.italic
+					});
+					const maxLines = Math.max(1, Math.floor((r.h - 2) / m.lineHeight));
+					labelText = m.lines.slice(0, maxLines).join('\n');
+				}
 				const text = new Text({
-					text: displayText,
+					text: labelText,
 					style: {
 						fontFamily: 'OpenSans, sans-serif',
 						fontSize: FONT_SIZE,
 						fill: format?.textColor ?? colors.cellFontColor,
 						fontWeight: format?.bold ? 'bold' : 'normal',
-						fontStyle: format?.italic ? 'italic' : 'normal'
+						fontStyle: format?.italic ? 'italic' : 'normal',
+						...(wrapping === 'wrap'
+							? { align: align as 'left' | 'center' | 'right' }
+							: {})
 					},
 					resolution: Math.max(2, window.devicePixelRatio || 1)
 				});
 
-				// overflow: truncate at the next non-empty cell (clip wraps at own cell)
-				const available = this.availableExtent(cell.x, cell.y, r.w, align, format?.wrapping);
-				if (text.width > available && displayText.length > 1) {
+				// overflow: truncate at the next non-empty cell (clip/wrap stay in cell)
+				const available = this.availableExtent(cell.x, cell.y, r.w, align, wrapping);
+				if (wrapping !== 'wrap' && text.width > available && displayText.length > 1) {
 					const keep = Math.max(1, Math.floor((displayText.length * available) / text.width));
 					text.text = displayText.slice(0, keep);
 				}
@@ -426,7 +463,7 @@ export class PixiGrid {
 		wrapping: string | undefined
 	): number {
 		let extent = cellWidth - CELL_TEXT_MARGIN_LEFT * 2;
-		if (wrapping === 'clip' || align === 'center') return extent;
+		if (wrapping === 'clip' || wrapping === 'wrap' || align === 'center') return extent;
 		const offsets = this.getSheet().gridOffsets;
 		const dir = align === 'right' ? -1 : 1;
 		for (let i = 1; i <= 40; i++) {
@@ -486,6 +523,18 @@ export class PixiGrid {
 					? editorModeColor(state.editorMode)
 					: colors.cursorCell
 			);
+		}
+
+		// fill-handle drag preview
+		if (state.fillPreview) {
+			const p = state.fillPreview;
+			const left = offsets.getColumnX(p.x0);
+			const top = offsets.getRowY(p.y0);
+			const right = offsets.getColumnX(p.x1) + offsets.getColumnWidth(p.x1);
+			const bottom = offsets.getRowY(p.y1) + offsets.getRowHeight(p.y1);
+			g.rect(left, top, right - left, bottom - top)
+				.fill({ color: colors.cursorCell, alpha: 0.08 })
+				.stroke({ color: colors.cursorCell, alpha: 0.7, pixelLine: true });
 		}
 
 		// code editor cell highlight

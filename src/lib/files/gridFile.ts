@@ -58,6 +58,26 @@ export function importGridFile(sc: SheetController, file: GridFile): void {
 			rows: f.rows ?? [],
 			cell_dependency: typeof f.cell_dependency === 'string' ? f.cell_dependency : '[]'
 		});
+		// files from the original app store borders separately, one entry per
+		// cell with `horizontal` = top edge and `vertical` = left edge; fold
+		// them into our per-format borders
+		if (Array.isArray(f.borders)) {
+			for (const b of f.borders as {
+				x: number;
+				y: number;
+				horizontal?: { color?: string };
+				vertical?: { color?: string };
+			}[]) {
+				if (!b || (b.horizontal === undefined && b.vertical === undefined)) continue;
+				const existing = sheet.getFormat(b.x, b.y) ?? { x: b.x, y: b.y };
+				const borders = { ...(existing.borders ?? {}) };
+				if (b.horizontal)
+					borders.top = typeof b.horizontal.color === 'string' ? b.horizontal.color : '#000000';
+				if (b.vertical)
+					borders.left = typeof b.vertical.color === 'string' ? b.vertical.color : '#000000';
+				sheet.setFormat(b.x, b.y, { ...existing, borders });
+			}
+		}
 		sheet.rebuildDependencies();
 		return sheet;
 	});

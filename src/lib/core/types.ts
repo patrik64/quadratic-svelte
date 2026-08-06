@@ -45,6 +45,14 @@ export type CellTextFormat =
 	| { type: 'PERCENTAGE'; decimalPlaces?: number }
 	| { type: 'EXPONENTIAL'; decimalPlaces?: number };
 
+/** Per-edge border colors; an absent edge means no border. */
+export interface CellBorders {
+	top?: string;
+	bottom?: string;
+	left?: string;
+	right?: string;
+}
+
 export interface CellFormat {
 	x: number;
 	y: number;
@@ -55,6 +63,7 @@ export interface CellFormat {
 	fillColor?: string;
 	textFormat?: CellTextFormat;
 	wrapping?: CellWrapping;
+	borders?: CellBorders;
 }
 
 export interface Heading {

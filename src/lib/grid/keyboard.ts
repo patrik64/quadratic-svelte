@@ -25,7 +25,9 @@ import {
 	insertTodayDate,
 	copySelectionAsPng,
 	downloadSelectionAsCsv,
-	rerunAllCode
+	rerunAllCode,
+	fillDown,
+	fillRight
 } from '../state.svelte';
 
 // characters that open the inline editor when typed on a cell
@@ -102,6 +104,11 @@ export function keyboardViewport(e: KeyboardEvent): boolean {
 	}
 	if (mod && key === 'i') {
 		toggleItalic();
+		return true;
+	}
+	if (mod && key === 'f') {
+		app.searchAllSheets = e.shiftKey;
+		app.showSearch = true;
 		return true;
 	}
 	if (mod && (key === 'g' || key === 'j')) {
@@ -242,6 +249,16 @@ export function keyboardGrid(e: KeyboardEvent): boolean {
 	}
 	if (mod && key.toLowerCase() === 'v') {
 		void pasteFromClipboard();
+		return true;
+	}
+
+	// fill
+	if (mod && key.toLowerCase() === 'd' && !e.shiftKey) {
+		void fillDown();
+		return true;
+	}
+	if (mod && key.toLowerCase() === 'r' && !e.shiftKey) {
+		void fillRight();
 		return true;
 	}
 

@@ -340,7 +340,7 @@
 			<p class="lede">Porting the data-science spreadsheet — infinite WebGL grid, a Rust
 			formula core, Python and JavaScript cells — from React to SvelteKit, then tracking the
 			original as it moved on.</p>
-			<p class="note mono">quadratic-svelte · August 2026 · 11 commits · main @ 199b2cf</p>
+			<p class="note mono">quadratic-svelte · August 2026 · 22 commits · main @ 3bfcc91</p>
 		</div>
 	</section>
 
@@ -391,11 +391,13 @@
 							<td>Op-based transactions with captured inverses · <code>SheetController.ts</code></td></tr>
 						<tr><td><code>.grid</code> v1.3 schema</td>
 							<td>Same schema, multi-sheet, + legacy import · <code>files/gridFile.ts</code></td></tr>
+						<tr><td>localforage local-file store</td>
+							<td>IndexedDB autosave, quota errors surfaced in the status bar</td></tr>
 					</tbody>
 				</table>
 			</div>
-			<p class="note">Conventions carried over exactly: column A = x 0, row 0 exists, integer
-			headings with an A1 toggle, and the original example files open unchanged.</p>
+			<p class="note">Conventions carried over exactly: column A = x 0, row 0 exists, letter
+			column headings (numeric toggle in View), and the original example files open unchanged.</p>
 		</div>
 	</section>
 
@@ -431,11 +433,11 @@
 			function library was then extended with backports from the modern core, written in the
 			old engine's idiom and covered by its test suite.</p>
 			<div class="stats">
-				<div class="stat"><div class="num">46 → 109</div>
+				<div class="stat"><div class="num">46 → 115</div>
 					<div class="lbl">functions in the registry, after backporting</div></div>
-				<div class="stat"><div class="num good">39</div>
-					<div class="lbl">Rust tests passing, including the new rounding, criteria,
-					and calendar edge cases</div></div>
+				<div class="stat"><div class="num good">47</div>
+					<div class="lbl">Rust tests passing — rounding, criteria, calendar,
+					reference-rewrite, and array edge cases</div></div>
 			</div>
 			<div class="fn-groups">
 				<div class="fn-group" style="border-color: var(--formula)">
@@ -462,11 +464,16 @@
 					<b>Date &amp; time <em>+23</em></b>
 					<span>TODAY NOW DATE TIME YEAR…SECOND EDATE EOMONTH DAYS DAYS360 DATEDIF WEEKDAY WEEKNUM ISOWEEKNUM NETWORKDAYS WORKDAY YEARFRAC</span>
 				</div>
+				<div class="fn-group" style="border-color: var(--formula)">
+					<b>Array <em>+6</em></b>
+					<span>TRANSPOSE SEQUENCE UNIQUE SORT FILTER SUMPRODUCT — results spill from the formula's cell</span>
+				</div>
 			</div>
 			<p class="note">Criteria strings match Excel — <code>"&gt;=10"</code>,
 			<code>"&lt;&gt;x"</code>, <code>*</code>/<code>?</code> wildcards with <code>~</code>
-			escapes. Dates are ISO strings, since this engine has no date value type; calendar math
-			is dependency-free.</p>
+			escapes. Dates are ISO strings, since this engine has no date value type. The formula
+			editor autocompletes all 115 from the core's own Monaco LSP export — the first argument
+			placeholder arrives selected for type-over.</p>
 		</div>
 	</section>
 
@@ -518,15 +525,15 @@ console.log(<span class="s">'building'</span>, n, <span class="s">'rows'</span>)
 				step.</span></div>
 				<div class="card"><b>Multiple sheets</b><span>Tabs with per-sheet colors, rename,
 				duplicate, reorder; ⌥arrows switch. All sheets persist in the file.</span></div>
-				<div class="card"><b>Formula reference</b><span>Searchable browser of all 109
+				<div class="card"><b>Formula reference</b><span>Searchable browser of all 115
 				functions — signatures, docs, examples served live from the Rust registry; click to
 				insert.</span></div>
 				<div class="card"><b>Examples gallery</b><span>The upstream example files plus two
 				written for this port, tagged by language and shipped with pre-computed
 				outputs.</span></div>
 				<div class="card"><b>Editing &amp; formats</b><span>Inline editor, bold/italic,
-				colors, alignment, wrapping, number formats; undo reverts a whole computation
-				chain.</span></div>
+				colors, alignment, wrap with row autofit, cell borders, number formats; undo reverts
+				a whole computation chain.</span></div>
 			</div>
 		</div>
 	</section>
@@ -551,16 +558,53 @@ console.log(<span class="s">'building'</span>, n, <span class="s">'rows'</span>)
 				<li><code>=</code> starts a formula directly; <code>/</code> opens the cell type
 				menu</li>
 			</ul>
-			<p class="note">Skipped by choice: auth, multiplayer, and AI (out of scope); the 1-based
-			A1 overhaul (would break file compatibility); borders, merges, and the format painter
-			(a large formatting subsystem of their own).</p>
+			<p class="note">Skipped by choice: auth, multiplayer, and AI (out of scope), and the
+			1-based A1 overhaul — it would break file compatibility, though letter column headings
+			are now the default look.</p>
 		</div>
 	</section>
 
 	<!-- A9 -->
+	<section class="slide" aria-label="Closing the gap">
+		<div class="frame">
+			<p class="eyebrow"><b>A9</b> · Closing the gap</p>
+			<h2>Then the distance kept shrinking</h2>
+			<p class="lede">After the first backport wave, the rest of the ledger was worked down
+			feature by feature — each one browser-verified before its commit.</p>
+			<ul class="checks">
+				<li>Cross-sheet references — <code>Sheet1!A0</code>,
+				<code>'My Sheet'!A0:B2</code> — resolved at evaluation time, with a cross-sheet
+				dependency graph so edits ripple between sheets</li>
+				<li>Formulas relocate: row/column inserts and deletes rewrite A1 references in
+				formula text (<code>$</code> pins respected) via new <code>adjust_formula</code> /
+				<code>relocate_formula</code> Rust exports</li>
+				<li>IndexedDB autosave — localStorage's ~5&thinsp;MB quota silently truncated large
+				sheets; save failures now surface in the status bar</li>
+				<li>Find (⌘F, with an all-sheets mode), fill-handle drag and ⌘D/⌘R with series
+				detection, and a live Sum·Avg·Count selection summary</li>
+				<li>Formula autocomplete at the caret, powered by the core's dormant Monaco LSP
+				export — six array functions spilling onto the grid joined the registry the same
+				week</li>
+				<li>Wrapped text with undoable row autofit, and cell borders with color and the
+				full set of application modes</li>
+			</ul>
+			<div class="commits">
+				<div class="commit"><code>ee1fbbc</code><span>Formula relocation on shifts · IndexedDB autosave</span></div>
+				<div class="commit"><code>17c6c71</code><span>Find, fill, selection summary</span></div>
+				<div class="commit"><code>dea00ca</code><span>Cross-sheet references</span></div>
+				<div class="commit"><code>bf2d419</code><span>Array functions</span></div>
+				<div class="commit"><code>8dd8ffd</code><span>Formula autocomplete</span></div>
+				<div class="commit"><code>53ef4fa</code><span>Wrapped text</span></div>
+				<div class="commit"><code>33eb60e</code><span>Cell borders</span></div>
+				<div class="commit"><code>3bfcc91</code><span>A1 letter headings by default</span></div>
+			</div>
+		</div>
+	</section>
+
+	<!-- A10 -->
 	<section class="slide" aria-label="Verification">
 		<div class="frame">
-			<p class="eyebrow"><b>A9</b> · Verified in the browser</p>
+			<p class="eyebrow"><b>A10</b> · Verified in the browser</p>
 			<h2>Driven, not assumed</h2>
 			<ul class="checks">
 				<li>Cross-language chain: editing one cell rippled text → formula → formula →
@@ -589,29 +633,28 @@ console.log(<span class="s">'building'</span>, n, <span class="s">'rows'</span>)
 		</div>
 	</section>
 
-	<!-- A10 -->
+	<!-- A11 -->
 	<section class="slide" aria-label="Not ported">
 		<div class="frame">
-			<p class="eyebrow"><b>A10</b> · Honest ledger</p>
+			<p class="eyebrow"><b>A11</b> · Honest ledger</p>
 			<h2>Not ported (yet)</h2>
 			<ul class="plain">
-				<li>Cell borders, merged cells, and the format painter</li>
-				<li>Fill-handle drag with series auto-complete</li>
 				<li>AI cells and SQL connection cells</li>
 				<li>Auth, sharing, and multiplayer</li>
-				<li>Formula text isn't rewritten when rows or columns shift — the modern core
-				relocates references using RC machinery this vendored parser doesn't have</li>
-				<li>The financial, engineering, database, and array function categories</li>
+				<li>The format painter</li>
+				<li>The financial, engineering, and database function categories</li>
+				<li>The Electron desktop shell</li>
 			</ul>
-			<p class="note">The trade that shaped several of these: this port stays on the v1.3
-			file format and 0-based coordinates, so it can still open the original's files.</p>
+			<p class="note">Merged cells aren't on this list because the original doesn't have them
+			either. The trade that shaped the rest: this port stays on the v1.3 file format and
+			0-based coordinates, so it can still open the original's files.</p>
 		</div>
 	</section>
 
-	<!-- A11 -->
+	<!-- A12 -->
 	<section class="slide" aria-label="Run it">
 		<div class="frame">
-			<p class="eyebrow"><b>A11</b> · Run it</p>
+			<p class="eyebrow"><b>A12</b> · Run it</p>
 			<h2>Two commands</h2>
 <pre style="max-width: 42rem"><code>npm install
 npm run dev        <span class="c"># → http://localhost:5173</span>
@@ -621,7 +664,8 @@ npm run build:wasm
 npm run examples</code></pre>
 			<p class="note">The built wasm <code>pkg/</code> is committed, so the app runs without a
 			Rust toolchain. Docs live in <code>README.md</code>; this deck is
-			<code>docs/slides.html</code>.</p>
+			<code>docs/slides.html</code>, and every keyboard shortcut is on
+			<code>docs/keyboard.html</code>.</p>
 			<div class="cursor-cell" style="margin-top: 0.4rem; padding: 0.85rem 1.5rem 0.95rem">
 				<p class="mono" style="font-size: 0.92rem">The data science spreadsheet, in SvelteKit.</p>
 			</div>

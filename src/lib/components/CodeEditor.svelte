@@ -3,11 +3,154 @@
 	import { editorModeColor } from '../grid/colors';
 	import { KeyboardSymbols } from '../helpers/keyboardSymbols';
 	import { pythonStatus } from '../python/pythonRunner';
+	import type { FormulaCompletion } from '../formulas/runFormula';
 	import { app, saveCellCode, sheetController } from '../state.svelte';
 
 	let code = $state('');
 	let running = $state(false);
 	let textareaEl: HTMLTextAreaElement | undefined = $state();
+
+	// ---------- formula autocomplete (fed by the core's LSP module) ----------
+
+	let completions: FormulaCompletion[] = $state([]);
+	$effect(() => {
+		if (app.editorMode === 'FORMULA' && completions.length === 0) {
+			void import('../formulas/runFormula').then(async (m) => {
+				completions = await m.getFormulaCompletions();
+			});
+		}
+	});
+
+	let caretPos = $state(0);
+	let acDismissed = $state(false);
+	let acIndex = $state(0);
+	let acPos = $state({ left: 0, top: 0 });
+
+	// identifier ending at the caret, unless the caret sits inside a string
+	const acWord = $derived.by(() => {
+		if (app.editorMode !== 'FORMULA') return null;
+		const upto = code.slice(0, caretPos);
+		let quote: string | null = null;
+		for (const ch of upto) {
+			if (quote) {
+				if (ch === quote) quote = null;
+			} else if (ch === '"' || ch === "'") quote = ch;
+		}
+		if (quote) return null;
+		const m = /[A-Za-z_][A-Za-z0-9_]*$/.exec(upto);
+		return m ? { start: caretPos - m[0].length, text: m[0] } : null;
+	});
+
+	const acItems = $derived.by(() => {
+		if (!acWord || acDismissed || completions.length === 0) return [];
+		const prefix = acWord.text.toUpperCase();
+		return completions.filter((c) => c.label.startsWith(prefix));
+	});
+	const acOpen = $derived(acItems.length > 0);
+	const acSel = $derived(Math.min(acIndex, Math.max(acItems.length - 1, 0)));
+
+	/** Flattens a Monaco `${n:placeholder}` snippet to plain text, keeping the
+	 * first placeholder's range so it can be selected for type-over. */
+	function expandSnippet(snippet: string): { text: string; selStart: number; selEnd: number } {
+		let text = '';
+		let sel: { start: number; end: number } | undefined;
+		let i = 0;
+		const re = /\$\{\d+:([^}]*)\}|\$\d+/g;
+		let m: RegExpExecArray | null;
+		while ((m = re.exec(snippet))) {
+			text += snippet.slice(i, m.index);
+			const ph = m[1] ?? '';
+			if (!sel) sel = { start: text.length, end: text.length + ph.length };
+			text += ph;
+			i = m.index + m[0].length;
+		}
+		text += snippet.slice(i);
+		const at = sel ?? { start: text.length, end: text.length };
+		return { text, selStart: at.start, selEnd: at.end };
+	}
+
+	function acceptCompletion(item: FormulaCompletion): void {
+		if (!acWord || !textareaEl) return;
+		const { text, selStart, selEnd } = expandSnippet(item.insertText ?? `${item.label}()`);
+		const start = acWord.start;
+		code = code.slice(0, start) + text + code.slice(caretPos);
+		acDismissed = true; // stay closed until the user types again
+		queueMicrotask(() => {
+			textareaEl?.focus();
+			textareaEl?.setSelectionRange(start + selStart, start + selEnd);
+			caretPos = start + selEnd;
+		});
+	}
+
+	function acDocText(item: FormulaCompletion): string {
+		const doc = item.documentation;
+		const raw = typeof doc === 'string' ? doc : (doc?.value ?? '');
+		// keep the prose: drop the leading "# Description" header, the examples
+		// section, and code ticks
+		const cut = raw.split(/\n#/)[0];
+		return cut
+			.replace(/^#[^\n]*\n?/, '')
+			.replace(/`/g, '')
+			.trim();
+	}
+
+	// caret pixel position via a hidden mirror of the textarea's text layout
+	let mirror: HTMLDivElement | undefined;
+	function refreshAcPos(): void {
+		const el = textareaEl;
+		if (!el) return;
+		const upto = el.value.slice(0, el.selectionStart ?? 0);
+		const wordLen = /[A-Za-z_][A-Za-z0-9_]*$/.exec(upto)?.[0].length ?? 0;
+		if (!mirror) {
+			mirror = document.createElement('div');
+			el.parentElement?.appendChild(mirror);
+		}
+		const cs = getComputedStyle(el);
+		for (const p of [
+			'fontFamily',
+			'fontSize',
+			'fontWeight',
+			'lineHeight',
+			'letterSpacing',
+			'tabSize',
+			'padding'
+		] as const) {
+			mirror.style[p] = cs[p];
+		}
+		Object.assign(mirror.style, {
+			position: 'absolute',
+			top: '0',
+			left: '0',
+			visibility: 'hidden',
+			whiteSpace: 'pre-wrap',
+			overflowWrap: 'break-word',
+			pointerEvents: 'none',
+			width: `${el.clientWidth}px`
+		});
+		mirror.textContent = upto.slice(0, upto.length - wordLen);
+		const marker = document.createElement('span');
+		marker.textContent = '\u200b';
+		mirror.appendChild(marker);
+		const lineHeight = parseFloat(cs.lineHeight) || 18;
+		const left = Math.max(
+			0,
+			Math.min(marker.offsetLeft - el.scrollLeft, el.clientWidth - 290)
+		);
+		acPos = { left, top: marker.offsetTop - el.scrollTop + lineHeight + 2 };
+	}
+
+	function updateCaret(): void {
+		caretPos = textareaEl?.selectionStart ?? 0;
+		refreshAcPos();
+	}
+
+	function keepSelectedInView(): void {
+		queueMicrotask(() =>
+			document
+				.querySelector('.code-editor .ac li.sel')
+				?.scrollIntoView({ block: 'nearest' })
+		);
+	}
 
 	// reload the buffer whenever the editor targets a different cell/mode
 	let loadedKey = $state('');
@@ -78,6 +221,28 @@
 			void run();
 			return;
 		}
+		// autocomplete owns navigation keys while its dropdown is open
+		if (acOpen && e.target === textareaEl) {
+			if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+				e.preventDefault();
+				e.stopPropagation();
+				acIndex = (acSel + (e.key === 'ArrowDown' ? 1 : -1) + acItems.length) % acItems.length;
+				keepSelectedInView();
+				return;
+			}
+			if (e.key === 'Tab' || e.key === 'Enter') {
+				e.preventDefault();
+				e.stopPropagation();
+				acceptCompletion(acItems[acSel]);
+				return;
+			}
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				e.stopPropagation();
+				acDismissed = true;
+				return;
+			}
+		}
 		if (e.key === 'Escape') {
 			e.preventDefault();
 			e.stopPropagation();
@@ -126,17 +291,56 @@
 		<div class="python-loading">Loading Python runtime (Pyodide + pandas)… first run may take a moment.</div>
 	{/if}
 
-	<textarea
-		bind:this={textareaEl}
-		bind:value={code}
-		class="code"
-		spellcheck="false"
-		placeholder={app.editorMode === 'FORMULA'
-			? 'e.g.  SUM(A0:A5) * 2'
-			: app.editorMode === 'JAVASCRIPT'
-				? "e.g.\nlet total = q.cells('D6');\nreturn total * 2;"
-				: 'e.g.\nresult = cell(0, 0)\nresult * 2'}
-	></textarea>
+	<div class="editor-area">
+		<textarea
+			bind:this={textareaEl}
+			bind:value={code}
+			class="code"
+			spellcheck="false"
+			oninput={() => {
+				acDismissed = false;
+				acIndex = 0;
+				updateCaret();
+			}}
+			onclick={updateCaret}
+			onkeyup={(e) => {
+				if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key))
+					updateCaret();
+			}}
+			onscroll={refreshAcPos}
+			onblur={() => (acDismissed = true)}
+			placeholder={app.editorMode === 'FORMULA'
+				? 'e.g.  SUM(A0:A5) * 2'
+				: app.editorMode === 'JAVASCRIPT'
+					? "e.g.\nlet total = q.cells('D6');\nreturn total * 2;"
+					: 'e.g.\nresult = cell(0, 0)\nresult * 2'}
+		></textarea>
+		{#if acOpen}
+			<div class="ac" style:left="{acPos.left}px" style:top="{acPos.top}px">
+				<ul>
+					{#each acItems as item, i (item.label)}
+						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+						<li
+							class:sel={i === acSel}
+							onmousedown={(e) => {
+								e.preventDefault();
+								acceptCompletion(item);
+							}}
+							onmousemove={() => (acIndex = i)}
+						>
+							<span class="ac-fx">ƒ</span>{item.label}
+						</li>
+					{/each}
+				</ul>
+				{#if acItems[acSel]}
+					<div class="ac-doc">
+						<div class="ac-usage">{acItems[acSel].detail?.split('\n')[0]}</div>
+						<div class="ac-text">{acDocText(acItems[acSel])}</div>
+					</div>
+				{/if}
+			</div>
+		{/if}
+	</div>
 
 	<div class="output">
 		<div class="output-header">OUTPUT</div>
@@ -241,8 +445,15 @@
 		color: #664d03;
 		font-size: 0.75rem;
 	}
+	.editor-area {
+		position: relative;
+		flex: 1;
+		display: flex;
+		min-height: 8rem;
+	}
 	.code {
 		flex: 1;
+		width: 100%;
 		border: none;
 		outline: none;
 		resize: none;
@@ -251,7 +462,65 @@
 		font-size: 0.8rem;
 		line-height: 1.5;
 		tab-size: 4;
-		min-height: 8rem;
+	}
+	.ac {
+		position: absolute;
+		z-index: 70;
+		width: 280px;
+		background: white;
+		border: 1px solid #cfd7de;
+		border-radius: 4px;
+		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
+		font-size: 0.78rem;
+		overflow: hidden;
+	}
+	.ac ul {
+		list-style: none;
+		margin: 0;
+		padding: 0.2rem 0;
+		max-height: 11rem;
+		overflow-y: auto;
+	}
+	.ac li {
+		padding: 0.22rem 0.6rem;
+		font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+		font-size: 0.75rem;
+		cursor: pointer;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.ac li.sel {
+		background: #eef4ff;
+	}
+	.ac-fx {
+		color: #8c1a6a;
+		margin-right: 0.45rem;
+		font-style: italic;
+	}
+	.ac-doc {
+		border-top: 1px solid #e6ebf0;
+		padding: 0.4rem 0.6rem;
+		background: #fafbfc;
+	}
+	.ac-usage {
+		font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+		font-size: 0.7rem;
+		color: #2463eb;
+		margin-bottom: 0.25rem;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.ac-text {
+		color: #55606b;
+		font-size: 0.72rem;
+		line-height: 1.4;
+		display: -webkit-box;
+		-webkit-line-clamp: 3;
+		line-clamp: 3;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
 	}
 	.output {
 		border-top: 1px solid #e6ebf0;

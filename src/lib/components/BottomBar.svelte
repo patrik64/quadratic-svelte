@@ -3,6 +3,30 @@
 	import { app, sheetController } from '../state.svelte';
 
 	const selection = $derived(app.multiCursor);
+
+	// Sum / Avg / Count over the selection, like the modern SheetBar summary
+	const summary = $derived.by(() => {
+		void app.redraw;
+		if (!app.multiCursor) return undefined;
+		const o = app.multiCursor.originPosition;
+		const t = app.multiCursor.terminalPosition;
+		const cells = sheetController.sheet.getCellsInRect({
+			left: Math.min(o.x, t.x),
+			top: Math.min(o.y, t.y),
+			right: Math.max(o.x, t.x),
+			bottom: Math.max(o.y, t.y)
+		});
+		const nonEmpty = cells.filter((c) => c.value !== '');
+		if (nonEmpty.length < 2) return undefined;
+		const numbers = nonEmpty.map((c) => Number(c.value)).filter((n) => !Number.isNaN(n));
+		const fmt = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+		const sum = numbers.reduce((a, b) => a + b, 0);
+		return {
+			sum: numbers.length > 0 ? fmt(sum) : undefined,
+			avg: numbers.length > 0 ? fmt(sum / numbers.length) : undefined,
+			count: nonEmpty.length
+		};
+	});
 	const cursorCell = $derived.by(() => {
 		void app.redraw;
 		return sheetController.sheet.getCell(app.cursorPosition.x, app.cursorPosition.y);
@@ -36,6 +60,11 @@
 		{/if}
 	</div>
 	<div class="right">
+		{#if summary}
+			<span class="stat summary">
+				{#if summary.sum !== undefined}Sum: {summary.sum} · Avg: {summary.avg} · {/if}Count: {summary.count}
+			</span>
+		{/if}
 		{#if app.saveError}
 			<span class="stat error" title={app.saveError}>
 				⚠ Autosave failed — use File → Download to keep your work
@@ -78,6 +107,10 @@
 	}
 	.stat.error {
 		color: #f25f5c;
+	}
+	.stat.summary {
+		color: #2463eb;
+		font-variant-numeric: tabular-nums;
 	}
 	button.link {
 		background: none;

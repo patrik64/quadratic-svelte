@@ -23,6 +23,70 @@ export class SheetController {
 	private redoStack: Transaction[] = [];
 	private activeTransaction: Transaction | undefined;
 
+	/** Cross-sheet formula dependencies: rect on a named sheet → dependent
+	 * cell. Kept as rects so huge ranges cost one entry; rebuilt from formula
+	 * text on load, so it is not persisted in the file. */
+	private crossDeps: {
+		sheetName: string;
+		x0: number;
+		y0: number;
+		x1: number;
+		y1: number;
+		depSheetIndex: number;
+		depX: number;
+		depY: number;
+	}[] = [];
+
+	setCrossSheetDeps(
+		dependent: { sheetIndex: number; x: number; y: number },
+		refs: { sheetName: string; x0: number; y0: number; x1: number; y1: number }[]
+	): void {
+		this.crossDeps = this.crossDeps.filter(
+			(d) =>
+				!(
+					d.depSheetIndex === dependent.sheetIndex &&
+					d.depX === dependent.x &&
+					d.depY === dependent.y
+				)
+		);
+		for (const ref of refs) {
+			this.crossDeps.push({
+				...ref,
+				depSheetIndex: dependent.sheetIndex,
+				depX: dependent.x,
+				depY: dependent.y
+			});
+		}
+	}
+
+	/** Cells (possibly on other sheets) whose formulas read (x, y) on `sheetName`. */
+	getCrossSheetDependents(
+		sheetName: string,
+		x: number,
+		y: number
+	): { sheetIndex: number; x: number; y: number }[] {
+		return this.crossDeps
+			.filter(
+				(d) =>
+					d.sheetName === sheetName && x >= d.x0 && x <= d.x1 && y >= d.y0 && y <= d.y1
+			)
+			.map((d) => ({ sheetIndex: d.depSheetIndex, x: d.depX, y: d.depY }));
+	}
+
+	/** Re-derives cross-sheet deps by scanning formula text (used on load). */
+	rebuildCrossSheetDeps(findRefs: (code: string) => { sheetName: string; x0: number; y0: number; x1: number; y1: number }[]): void {
+		this.crossDeps = [];
+		this.sheets.forEach((sheet, sheetIndex) => {
+			for (const cell of sheet.getAllCells()) {
+				if (cell.type !== 'FORMULA' || !cell.formula_code) continue;
+				const refs = findRefs(cell.formula_code);
+				if (refs.length > 0) {
+					this.setCrossSheetDeps({ sheetIndex, x: cell.x, y: cell.y }, refs);
+				}
+			}
+		});
+	}
+
 	/** Called after any model mutation so the UI can re-render/persist. */
 	onChange: () => void = () => {};
 

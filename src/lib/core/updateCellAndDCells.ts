@@ -1,9 +1,10 @@
 import type { SheetController } from './SheetController';
-import { coordKey, isCodeCellType, type ArrayOutput, type Cell, type Coordinate } from './types';
+import { coordKey, isCodeCellType, type ArrayOutput, type Cell } from './types';
 
 // Port of Quadratic's updateCellAndDCells: writes/deletes the starting cells,
 // evaluates code cells, spills array output, and recomputes dependent cells
-// transitively via the dependency graph.
+// transitively via the dependency graph. The queue carries a sheet index so
+// cross-sheet formula dependents recompute against their own sheet.
 
 export interface UpdateCellsOptions {
 	starting_cells: Cell[];
@@ -11,54 +12,85 @@ export interface UpdateCellsOptions {
 	delete_starting_cells?: boolean;
 }
 
+interface QueueItem {
+	sheetIndex: number;
+	x: number;
+	y: number;
+}
+
 const MAX_UPDATES_PER_CELL = 25; // circular-reference guard
+
+function itemKey(item: QueueItem): string {
+	return `${item.sheetIndex}:${coordKey(item.x, item.y)}`;
+}
 
 export async function updateCellAndDCells(options: UpdateCellsOptions): Promise<void> {
 	const { starting_cells, sheetController: sc, delete_starting_cells } = options;
 	const sheet = sc.sheet;
+	const startSheetIndex = sc.currentSheetIndex;
 
-	const queue: Coordinate[] = [];
+	const queue: QueueItem[] = [];
 	const updateCounts = new Map<string, number>();
-	const startingKeys = new Set(starting_cells.map((c) => coordKey(c.x, c.y)));
+	const startingKeys = new Set(
+		starting_cells.map((c) => `${startSheetIndex}:${coordKey(c.x, c.y)}`)
+	);
 
 	for (const cell of starting_cells) {
 		if (delete_starting_cells) {
 			const existing = sheet.getCell(cell.x, cell.y);
 			if (existing) {
-				deleteArrayCells(existing, sc, queue);
-				sc.execute({ type: 'setCell', x: cell.x, y: cell.y, cell: undefined });
+				deleteArrayCells(existing, sc, startSheetIndex, queue);
+				sc.execute({
+					type: 'setCell',
+					x: cell.x,
+					y: cell.y,
+					cell: undefined,
+					sheetIndex: startSheetIndex
+				});
 				sheet.setDependencies({ x: cell.x, y: cell.y }, []);
+				sc.setCrossSheetDeps({ sheetIndex: startSheetIndex, x: cell.x, y: cell.y }, []);
 			}
 		} else {
-			sc.execute({ type: 'setCell', x: cell.x, y: cell.y, cell });
+			sc.execute({ type: 'setCell', x: cell.x, y: cell.y, cell, sheetIndex: startSheetIndex });
 		}
-		queue.push({ x: cell.x, y: cell.y });
+		queue.push({ sheetIndex: startSheetIndex, x: cell.x, y: cell.y });
 	}
 
 	while (queue.length > 0) {
-		const coord = queue.shift()!;
-		const key = coordKey(coord.x, coord.y);
+		const item = queue.shift()!;
+		const key = itemKey(item);
 		const count = (updateCounts.get(key) ?? 0) + 1;
 		if (count > MAX_UPDATES_PER_CELL) continue; // circular reference; stop propagating
 		updateCounts.set(key, count);
 
-		const cell = sheet.getCell(coord.x, coord.y);
+		const itemSheet = sc.sheets[item.sheetIndex];
+		if (!itemSheet) continue;
+		const cell = itemSheet.getCell(item.x, item.y);
 
 		if (cell && isCodeCellType(cell.type)) {
-			await computeCell(cell, sc, queue);
+			await computeCell(cell, sc, item.sheetIndex, queue);
 		} else if (cell && startingKeys.has(key) && cell.type === 'TEXT') {
 			// plain text write; nothing to compute
 		}
 
-		// propagate to cells whose computations read this cell
-		for (const dep of sheet.getDependents(coord.x, coord.y)) {
+		// propagate to same-sheet dependents, then to cross-sheet formula
+		// dependents registered against this sheet's name
+		for (const dep of itemSheet.getDependents(item.x, item.y)) {
+			queue.push({ sheetIndex: item.sheetIndex, ...dep });
+		}
+		for (const dep of sc.getCrossSheetDependents(itemSheet.name, item.x, item.y)) {
 			queue.push(dep);
 		}
 	}
 }
 
-async function computeCell(cell: Cell, sc: SheetController, queue: Coordinate[]): Promise<void> {
-	const sheet = sc.sheet;
+async function computeCell(
+	cell: Cell,
+	sc: SheetController,
+	sheetIndex: number,
+	queue: QueueItem[]
+): Promise<void> {
+	const sheet = sc.sheets[sheetIndex];
 	const getCellValue = (x: number, y: number) => sheet.getCell(x, y)?.value;
 
 	let success: boolean;
@@ -70,13 +102,16 @@ async function computeCell(cell: Cell, sc: SheetController, queue: Coordinate[])
 	let errorSpan: [number, number] | null = null;
 
 	if (cell.type === 'FORMULA') {
-		// Rust/WASM quadratic-core engine, lazy-loaded on first evaluation
+		// Rust/WASM quadratic-core engine, lazy-loaded on first evaluation.
+		// Sheet-qualified refs are resolved here (the engine is sheet-unaware)
+		// and registered in the controller's cross-sheet dependency graph.
 		const { runFormula } = await import('../formulas/runFormula');
-		const result = await runFormula(
-			cell.formula_code ?? '',
-			{ x: cell.x, y: cell.y },
-			getCellValue
+		const { substituteSheetRefs } = await import('../formulas/sheetRefs');
+		const { code, refs } = substituteSheetRefs(cell.formula_code ?? '', (name) =>
+			sc.sheets.find((s) => s.name === name)
 		);
+		sc.setCrossSheetDeps({ sheetIndex, x: cell.x, y: cell.y }, refs);
+		const result = await runFormula(code, { x: cell.x, y: cell.y }, getCellValue);
 		success = result.success;
 		displayValue = result.success ? (result.output_value ?? '') : '';
 		arrayOutput = result.array_output ?? undefined;
@@ -147,9 +182,10 @@ async function computeCell(cell: Cell, sc: SheetController, queue: Coordinate[])
 						type: 'COMPUTED',
 						value: String(v),
 						last_modified: new Date().toISOString()
-					}
+					},
+					sheetIndex
 				});
-				queue.push({ x, y });
+				queue.push({ sheetIndex, x, y });
 			}
 		}
 	}
@@ -160,8 +196,8 @@ async function computeCell(cell: Cell, sc: SheetController, queue: Coordinate[])
 		if (!newKeys.has(coordKey(x, y))) {
 			const existing = sheet.getCell(x, y);
 			if (existing?.type === 'COMPUTED') {
-				sc.execute({ type: 'setCell', x, y, cell: undefined });
-				queue.push({ x, y });
+				sc.execute({ type: 'setCell', x, y, cell: undefined, sheetIndex });
+				queue.push({ sheetIndex, x, y });
 			}
 		}
 	}
@@ -181,7 +217,7 @@ async function computeCell(cell: Cell, sc: SheetController, queue: Coordinate[])
 		},
 		last_modified: new Date().toISOString()
 	};
-	sc.execute({ type: 'setCell', x: cell.x, y: cell.y, cell: updated });
+	sc.execute({ type: 'setCell', x: cell.x, y: cell.y, cell: updated, sheetIndex });
 
 	sheet.setDependencies(
 		{ x: cell.x, y: cell.y },
@@ -189,13 +225,19 @@ async function computeCell(cell: Cell, sc: SheetController, queue: Coordinate[])
 	);
 }
 
-function deleteArrayCells(cell: Cell, sc: SheetController, queue: Coordinate[]): void {
+function deleteArrayCells(
+	cell: Cell,
+	sc: SheetController,
+	sheetIndex: number,
+	queue: QueueItem[]
+): void {
+	const sheet = sc.sheets[sheetIndex];
 	for (const [x, y] of cell.array_cells ?? []) {
 		if (x === cell.x && y === cell.y) continue;
-		const existing = sc.sheet.getCell(x, y);
+		const existing = sheet.getCell(x, y);
 		if (existing?.type === 'COMPUTED') {
-			sc.execute({ type: 'setCell', x, y, cell: undefined });
-			queue.push({ x, y });
+			sc.execute({ type: 'setCell', x, y, cell: undefined, sheetIndex });
+			queue.push({ sheetIndex, x, y });
 		}
 	}
 }

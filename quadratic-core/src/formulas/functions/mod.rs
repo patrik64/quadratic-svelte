@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 #[macro_use]
 mod util;
+mod array;
 mod datetime;
 mod logic;
 mod lookup;
@@ -29,6 +30,7 @@ pub const CATEGORIES: &[FormulaFunctionCategory] = &[
     string::CATEGORY,
     lookup::CATEGORY,
     datetime::CATEGORY,
+    array::CATEGORY,
 ];
 
 lazy_static! {
