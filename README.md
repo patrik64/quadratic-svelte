@@ -14,7 +14,7 @@ The original app is React + Recoil, renders the grid with Pixi.js (WebGL), evalu
 | Rust/WASM formula engine (`quadratic-core`) | The same crate, vendored and built with wasm-pack (`quadratic-core/`) |
 | Pyodide + `run_python.py` | Pyodide loaded from CDN + inline prelude (`src/lib/python/pythonRunner.ts`) |
 | Statement/runner transactions | Op-based transactions with captured inverses (`src/lib/core/SheetController.ts`) |
-| `.grid` file schema v1.3 + localforage | Same `.grid` schema (v1.3 + legacy import) + localStorage autosave |
+| `.grid` file schema v1.3 + localStorage | Same `.grid` schema (v1.3 + legacy import) + localStorage autosave |
 
 ## Run
 
