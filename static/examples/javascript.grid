@@ -1,0 +1,543 @@
+{
+ "sheets": [
+  {
+   "name": "JavaScript",
+   "order": 0,
+   "borders": [],
+   "cells": [
+    {
+     "x": 0,
+     "y": 0,
+     "type": "TEXT",
+     "value": "JavaScript cells",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 0,
+     "y": 1,
+     "type": "TEXT",
+     "value": "Return a value from a JS cell and it lands on the grid. Arrays spill.",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 0,
+     "y": 3,
+     "type": "TEXT",
+     "value": "Rows to build",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 1,
+     "y": 3,
+     "type": "TEXT",
+     "value": "7",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 2,
+     "y": 3,
+     "type": "TEXT",
+     "value": "← edit me, the table below rebuilds",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 0,
+     "y": 5,
+     "type": "JAVASCRIPT",
+     "value": "n",
+     "last_modified": "2026-08-06T12:00:00.000Z",
+     "javascript_code": "const n = q.cells('B3');\nconsole.log('building', n, 'rows');\nconst rows = [['n', 'squared', 'cubed']];\nfor (let i = 1; i <= n; i++) rows.push([i, i * i, i * i * i]);\nreturn rows;",
+     "array_cells": [
+      [
+       0,
+       5
+      ],
+      [
+       1,
+       5
+      ],
+      [
+       2,
+       5
+      ],
+      [
+       0,
+       6
+      ],
+      [
+       1,
+       6
+      ],
+      [
+       2,
+       6
+      ],
+      [
+       0,
+       7
+      ],
+      [
+       1,
+       7
+      ],
+      [
+       2,
+       7
+      ],
+      [
+       0,
+       8
+      ],
+      [
+       1,
+       8
+      ],
+      [
+       2,
+       8
+      ],
+      [
+       0,
+       9
+      ],
+      [
+       1,
+       9
+      ],
+      [
+       2,
+       9
+      ],
+      [
+       0,
+       10
+      ],
+      [
+       1,
+       10
+      ],
+      [
+       2,
+       10
+      ],
+      [
+       0,
+       11
+      ],
+      [
+       1,
+       11
+      ],
+      [
+       2,
+       11
+      ],
+      [
+       0,
+       12
+      ],
+      [
+       1,
+       12
+      ],
+      [
+       2,
+       12
+      ]
+     ],
+     "evaluation_result": {
+      "success": true,
+      "output_value": "n",
+      "std_out": "building 7 rows",
+      "cells_accessed": [
+       [
+        1,
+        3
+       ]
+      ],
+      "array_output": [
+       [
+        "n",
+        "squared",
+        "cubed"
+       ],
+       [
+        1,
+        1,
+        1
+       ],
+       [
+        2,
+        4,
+        8
+       ],
+       [
+        3,
+        9,
+        27
+       ],
+       [
+        4,
+        16,
+        64
+       ],
+       [
+        5,
+        25,
+        125
+       ],
+       [
+        6,
+        36,
+        216
+       ],
+       [
+        7,
+        49,
+        343
+       ]
+      ],
+      "error_span": null
+     }
+    },
+    {
+     "x": 1,
+     "y": 5,
+     "type": "COMPUTED",
+     "value": "squared",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 2,
+     "y": 5,
+     "type": "COMPUTED",
+     "value": "cubed",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 0,
+     "y": 6,
+     "type": "COMPUTED",
+     "value": "1",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 1,
+     "y": 6,
+     "type": "COMPUTED",
+     "value": "1",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 2,
+     "y": 6,
+     "type": "COMPUTED",
+     "value": "1",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 0,
+     "y": 7,
+     "type": "COMPUTED",
+     "value": "2",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 1,
+     "y": 7,
+     "type": "COMPUTED",
+     "value": "4",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 2,
+     "y": 7,
+     "type": "COMPUTED",
+     "value": "8",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 0,
+     "y": 8,
+     "type": "COMPUTED",
+     "value": "3",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 1,
+     "y": 8,
+     "type": "COMPUTED",
+     "value": "9",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 2,
+     "y": 8,
+     "type": "COMPUTED",
+     "value": "27",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 0,
+     "y": 9,
+     "type": "COMPUTED",
+     "value": "4",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 1,
+     "y": 9,
+     "type": "COMPUTED",
+     "value": "16",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 2,
+     "y": 9,
+     "type": "COMPUTED",
+     "value": "64",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 0,
+     "y": 10,
+     "type": "COMPUTED",
+     "value": "5",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 1,
+     "y": 10,
+     "type": "COMPUTED",
+     "value": "25",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 2,
+     "y": 10,
+     "type": "COMPUTED",
+     "value": "125",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 0,
+     "y": 11,
+     "type": "COMPUTED",
+     "value": "6",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 1,
+     "y": 11,
+     "type": "COMPUTED",
+     "value": "36",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 2,
+     "y": 11,
+     "type": "COMPUTED",
+     "value": "216",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 0,
+     "y": 12,
+     "type": "COMPUTED",
+     "value": "7",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 1,
+     "y": 12,
+     "type": "COMPUTED",
+     "value": "49",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 2,
+     "y": 12,
+     "type": "COMPUTED",
+     "value": "343",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 4,
+     "y": 5,
+     "type": "TEXT",
+     "value": "Formula over JS output",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 4,
+     "y": 6,
+     "type": "TEXT",
+     "value": "SUM of squares",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 5,
+     "y": 6,
+     "type": "FORMULA",
+     "value": "140",
+     "last_modified": "2026-08-06T12:00:00.000Z",
+     "formula_code": "SUM(B6:B12)",
+     "evaluation_result": {
+      "success": true,
+      "output_value": "140",
+      "cells_accessed": [
+       [
+        1,
+        6
+       ],
+       [
+        1,
+        7
+       ],
+       [
+        1,
+        8
+       ],
+       [
+        1,
+        9
+       ],
+       [
+        1,
+        10
+       ],
+       [
+        1,
+        11
+       ],
+       [
+        1,
+        12
+       ]
+      ],
+      "error_span": null
+     }
+    },
+    {
+     "x": 4,
+     "y": 8,
+     "type": "TEXT",
+     "value": "Scalar return",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    },
+    {
+     "x": 5,
+     "y": 8,
+     "type": "JAVASCRIPT",
+     "value": "14",
+     "last_modified": "2026-08-06T12:00:00.000Z",
+     "javascript_code": "const n = q.cells('B3');\nreturn n * 2;",
+     "evaluation_result": {
+      "success": true,
+      "output_value": "14",
+      "cells_accessed": [
+       [
+        1,
+        3
+       ]
+      ],
+      "error_span": null
+     }
+    },
+    {
+     "x": 4,
+     "y": 10,
+     "type": "TEXT",
+     "value": "API: q.cells(a1), q.pos(), console.log",
+     "last_modified": "2026-08-06T12:00:00.000Z"
+    }
+   ],
+   "formats": [
+    {
+     "x": 0,
+     "y": 0,
+     "bold": true,
+     "textColor": "#ca8a04"
+    },
+    {
+     "x": 0,
+     "y": 1,
+     "italic": true,
+     "textColor": "#55606b"
+    },
+    {
+     "x": 0,
+     "y": 3,
+     "bold": true
+    },
+    {
+     "x": 1,
+     "y": 3,
+     "fillColor": "#fff3cd"
+    },
+    {
+     "x": 2,
+     "y": 3,
+     "italic": true,
+     "textColor": "#55606b"
+    },
+    {
+     "x": 0,
+     "y": 5,
+     "bold": true,
+     "fillColor": "#fdf6e3"
+    },
+    {
+     "x": 1,
+     "y": 5,
+     "bold": true,
+     "fillColor": "#fdf6e3"
+    },
+    {
+     "x": 2,
+     "y": 5,
+     "bold": true,
+     "fillColor": "#fdf6e3"
+    },
+    {
+     "x": 4,
+     "y": 5,
+     "bold": true
+    },
+    {
+     "x": 4,
+     "y": 6,
+     "textColor": "#55606b"
+    },
+    {
+     "x": 4,
+     "y": 8,
+     "bold": true
+    },
+    {
+     "x": 4,
+     "y": 10,
+     "italic": true,
+     "textColor": "#ca8a04"
+    }
+   ],
+   "columns": [
+    {
+     "id": 2,
+     "size": 210
+    },
+    {
+     "id": 4,
+     "size": 170
+    }
+   ],
+   "rows": [],
+   "cell_dependency": "[]"
+  }
+ ],
+ "created": 1786017600000,
+ "filename": "JavaScript (example)",
+ "id": "3f9a1c22-0000-4000-8000-00000000f002",
+ "modified": 1786017600000,
+ "version": "1.3"
+}

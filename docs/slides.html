@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quadratic Svelte — Port Report</title>
+<style>
+	:root {
+		--sheet: #ffffff;
+		--ink: #1c2025;
+		--muted: #55606b;
+		--faint: #8a939c;
+		--gridline: rgba(35, 49, 67, 0.1);
+		--accent: #2463eb;
+		--accent-soft: rgba(36, 99, 235, 0.08);
+		--formula: #8c1a6a;
+		--python: #3776ab;
+		--javascript: #ca8a04;
+		--green-ink: #3f7a3a;
+		--error: #f25f5c;
+		--card: #f6f8fa;
+		--card-line: #e3e8ec;
+		--code-bg: #f2f5f7;
+	}
+	@media (prefers-color-scheme: dark) {
+		:root {
+			--sheet: #14171b;
+			--ink: #e8ebee;
+			--muted: #9aa4ad;
+			--faint: #6d7680;
+			--gridline: rgba(154, 175, 200, 0.09);
+			--accent: #6ea0ff;
+			--accent-soft: rgba(110, 160, 255, 0.1);
+			--formula: #d16bb0;
+			--python: #6fa8dc;
+			--javascript: #e0b341;
+			--green-ink: #8ecb89;
+			--card: #1b1f24;
+			--card-line: #2a3038;
+			--code-bg: #191d22;
+		}
+	}
+	:root[data-theme='dark'] {
+		--sheet: #14171b;
+		--ink: #e8ebee;
+		--muted: #9aa4ad;
+		--faint: #6d7680;
+		--gridline: rgba(154, 175, 200, 0.09);
+		--accent: #6ea0ff;
+		--accent-soft: rgba(110, 160, 255, 0.1);
+		--formula: #d16bb0;
+		--python: #6fa8dc;
+		--javascript: #e0b341;
+		--green-ink: #8ecb89;
+		--card: #1b1f24;
+		--card-line: #2a3038;
+		--code-bg: #191d22;
+	}
+	:root[data-theme='light'] {
+		--sheet: #ffffff;
+		--ink: #1c2025;
+		--muted: #55606b;
+		--faint: #8a939c;
+		--gridline: rgba(35, 49, 67, 0.1);
+		--accent: #2463eb;
+		--accent-soft: rgba(36, 99, 235, 0.08);
+		--formula: #8c1a6a;
+		--python: #3776ab;
+		--javascript: #ca8a04;
+		--green-ink: #3f7a3a;
+		--card: #f6f8fa;
+		--card-line: #e3e8ec;
+		--code-bg: #f2f5f7;
+	}
+
+	* { box-sizing: border-box; margin: 0; }
+
+	html, body { height: 100%; }
+	body {
+		font-family: -apple-system, system-ui, 'Segoe UI', Roboto, sans-serif;
+		color: var(--ink);
+		background: var(--sheet);
+		overflow: hidden;
+	}
+	code, .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+	.deck { position: relative; height: 100%; }
+
+	.slide {
+		position: absolute;
+		inset: 0;
+		display: none;
+		background-color: var(--sheet);
+		background-image:
+			linear-gradient(to right, var(--gridline) 1px, transparent 1px),
+			linear-gradient(to bottom, var(--gridline) 1px, transparent 1px);
+		background-size: 100px 21px;
+		overflow-y: auto;
+		overflow-x: hidden;
+	}
+	.slide.active { display: block; animation: appear 220ms ease-out; }
+	@keyframes appear { from { opacity: 0; } to { opacity: 1; } }
+	@media (prefers-reduced-motion: reduce) { .slide.active { animation: none; } }
+
+	.frame {
+		max-width: 1060px;
+		margin: 0 auto;
+		padding: clamp(2.5rem, 6vh, 4.5rem) clamp(1.5rem, 5vw, 4rem) 5.5rem;
+		min-height: 100%;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		gap: 1.5rem;
+	}
+
+	.eyebrow {
+		font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+		font-size: 0.75rem;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--muted);
+	}
+	.eyebrow b { color: var(--accent); font-weight: 600; }
+
+	h1 {
+		font-size: clamp(2.4rem, 6vw, 4.2rem);
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		line-height: 1.04;
+		text-wrap: balance;
+	}
+	h2 {
+		font-size: clamp(1.6rem, 3.4vw, 2.5rem);
+		font-weight: 750;
+		letter-spacing: -0.015em;
+		line-height: 1.1;
+		text-wrap: balance;
+	}
+	p.lede { font-size: 1.05rem; line-height: 1.6; color: var(--muted); max-width: 64ch; }
+	p.note { font-size: 0.88rem; line-height: 1.55; color: var(--faint); max-width: 72ch; }
+
+	/* the app's cell cursor, wrapped around the title */
+	.cursor-cell {
+		position: relative;
+		display: inline-block;
+		border: 2.5px solid var(--accent);
+		background: var(--accent-soft);
+		padding: 1.3rem 2.1rem 1.5rem;
+		max-width: fit-content;
+	}
+	.cursor-cell::after {
+		content: '';
+		position: absolute;
+		right: -6px;
+		bottom: -6px;
+		width: 11px;
+		height: 11px;
+		background: var(--accent);
+	}
+	.logo { display: inline-grid; grid-template-columns: 14px 14px; gap: 3px; margin-bottom: 0.9rem; }
+	.logo i { width: 14px; height: 14px; display: block; }
+	.logo i:nth-child(1) { background: #6cd4ff; }
+	.logo i:nth-child(2) { background: #8ecb89; }
+	.logo i:nth-child(3) { background: #cb8999; }
+	.logo i:nth-child(4) { background: #5d576b; }
+
+	.table-wrap { overflow-x: auto; }
+	table { border-collapse: collapse; width: 100%; font-size: 0.92rem; background: var(--sheet); }
+	th, td {
+		text-align: left;
+		padding: 0.55rem 0.85rem;
+		border: 1px solid var(--card-line);
+		vertical-align: top;
+		line-height: 1.45;
+	}
+	th {
+		font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+		font-size: 0.7rem;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--muted);
+		font-weight: 600;
+		background: var(--card);
+	}
+	td code { font-size: 0.84em; color: var(--muted); }
+
+	.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(225px, 1fr)); gap: 0.85rem; }
+	.card {
+		border: 1px solid var(--card-line);
+		background: var(--card);
+		padding: 0.9rem 1.05rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+	.card b { font-size: 0.93rem; }
+	.card span { font-size: 0.84rem; color: var(--muted); line-height: 1.5; }
+	.card.formula { border-top: 3px solid var(--formula); }
+	.card.python { border-top: 3px solid var(--python); }
+	.card.javascript { border-top: 3px solid var(--javascript); }
+	.card.accent { border-top: 3px solid var(--accent); }
+
+	.stats { display: flex; flex-wrap: wrap; gap: 0.9rem; }
+	.stat {
+		flex: 1 1 190px;
+		border: 1px solid var(--card-line);
+		background: var(--sheet);
+		padding: 1rem 1.2rem 1.1rem;
+	}
+	.stat .num {
+		font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+		font-variant-numeric: tabular-nums;
+		font-size: clamp(1.8rem, 3.8vw, 2.7rem);
+		font-weight: 700;
+		letter-spacing: -0.02em;
+		line-height: 1.1;
+	}
+	.stat .num.bad { color: var(--error); }
+	.stat .num.good { color: var(--accent); }
+	.stat .lbl { font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem; line-height: 1.45; }
+
+	pre {
+		background: var(--code-bg);
+		border: 1px solid var(--card-line);
+		padding: 0.85rem 1rem;
+		overflow-x: auto;
+		font-size: 0.79rem;
+		line-height: 1.55;
+	}
+	pre code { color: var(--ink); }
+	pre .c { color: var(--faint); }
+	pre .k { color: var(--formula); }
+	pre .s { color: var(--green-ink); }
+
+	ul.checks { list-style: none; display: grid; gap: 0.5rem; font-size: 0.95rem; max-width: 74ch; }
+	ul.checks li { padding-left: 1.6rem; position: relative; line-height: 1.5; }
+	ul.checks li::before {
+		content: '✓';
+		position: absolute;
+		left: 0;
+		color: var(--green-ink);
+		font-weight: 700;
+	}
+	ul.checks li code { font-size: 0.86em; color: var(--muted); }
+
+	ul.plain { list-style: none; display: grid; gap: 0.45rem; font-size: 0.92rem; color: var(--muted); }
+	ul.plain li { padding-left: 1.3rem; position: relative; line-height: 1.5; }
+	ul.plain li::before { content: '—'; position: absolute; left: 0; color: var(--faint); }
+
+	.commits { display: grid; gap: 0.35rem; font-size: 0.82rem; }
+	.commit { display: flex; gap: 0.85rem; align-items: baseline; }
+	.commit code { color: var(--accent); font-size: 0.78rem; }
+	.commit span { color: var(--muted); }
+
+	.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.3rem; align-items: start; }
+	@media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+
+	.fn-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 0.7rem; }
+	.fn-group {
+		border-left: 3px solid var(--card-line);
+		padding: 0.1rem 0 0.1rem 0.8rem;
+	}
+	.fn-group b {
+		display: block;
+		font-size: 0.82rem;
+		margin-bottom: 0.15rem;
+	}
+	.fn-group b em {
+		font-style: normal;
+		color: var(--faint);
+		font-weight: 400;
+		font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+		font-size: 0.75rem;
+	}
+	.fn-group span {
+		font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+		font-size: 0.72rem;
+		color: var(--muted);
+		line-height: 1.6;
+		word-spacing: 0.15em;
+	}
+
+	.hud {
+		position: fixed;
+		left: 0; right: 0; bottom: 0;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.7rem 1.2rem;
+		font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+		font-size: 0.73rem;
+		color: var(--muted);
+		pointer-events: none;
+		background: linear-gradient(to top, var(--sheet) 55%, transparent);
+	}
+	.hud .dots { display: flex; gap: 5px; pointer-events: auto; }
+	.hud .dots button {
+		width: 10px; height: 10px;
+		border: 1px solid var(--faint);
+		background: transparent;
+		padding: 0;
+		cursor: pointer;
+	}
+	.hud .dots button[aria-current='true'] { background: var(--accent); border-color: var(--accent); }
+	.hud .dots button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+	.hud .ref { font-variant-numeric: tabular-nums; }
+	.hud .keys { color: var(--faint); }
+	.navbtn {
+		position: fixed;
+		top: 50%;
+		transform: translateY(-50%);
+		border: 1px solid var(--card-line);
+		background: var(--sheet);
+		color: var(--muted);
+		width: 36px; height: 36px;
+		font-size: 1rem;
+		cursor: pointer;
+	}
+	.navbtn:hover { color: var(--ink); border-color: var(--faint); }
+	.navbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+	.navbtn.prev { left: 0.7rem; }
+	.navbtn.next { right: 0.7rem; }
+
+	@media print {
+		body { overflow: visible; }
+		.deck { height: auto; }
+		.slide { display: block; position: static; page-break-after: always; min-height: 100vh; }
+		.hud, .navbtn { display: none; }
+	}
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+	<!-- A1 -->
+	<section class="slide" aria-label="Title">
+		<div class="frame">
+			<span class="logo" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+			<div class="cursor-cell"><h1>Quadratic&nbsp;Svelte</h1></div>
+			<p class="lede">Porting the data-science spreadsheet — infinite WebGL grid, a Rust
+			formula core, Python and JavaScript cells — from React to SvelteKit, then tracking the
+			original as it moved on.</p>
+			<p class="note mono">quadratic-svelte · August 2026 · 11 commits · main @ 199b2cf</p>
+		</div>
+	</section>
+
+	<!-- A2 -->
+	<section class="slide" aria-label="The brief">
+		<div class="frame">
+			<p class="eyebrow"><b>A2</b> · The brief</p>
+			<h2>Same spreadsheet, new frame</h2>
+			<p class="lede">Quadratic is an infinite grid where a cell can hold text, an Excel-style
+			formula, or code — with results spilling back onto the sheet. The original is a React
+			app. The task: rebuild it in SvelteKit with the same data model, interactions, and file
+			format. Then a second brief: the upstream repo had moved from the v0.3 alpha this was
+			based on to the v0.24 production monorepo — bring across what fits.</p>
+			<div class="cards">
+				<div class="card accent"><b>Infinite grid</b><span>Pan and zoom in all four
+				directions; negative coordinates are first-class (column <code>nA</code>, row
+				<code>n5</code>).</span></div>
+				<div class="card formula"><b>Formula cells</b><span>A1 references and ranges,
+				evaluated by the <code>quadratic-core</code> Rust crate compiled to WASM.</span></div>
+				<div class="card python"><b>Python cells</b><span>Pyodide in the browser; the last
+				expression becomes the value, DataFrames spill as ranges.</span></div>
+				<div class="card javascript"><b>JavaScript cells</b><span>A first-class language
+				upstream since v0.24 — the returned value lands on the grid.</span></div>
+			</div>
+		</div>
+	</section>
+
+	<!-- A3 -->
+	<section class="slide" aria-label="Architecture map">
+		<div class="frame">
+			<p class="eyebrow"><b>A3</b> · Architecture</p>
+			<h2>Every layer, mapped</h2>
+			<div class="table-wrap">
+				<table>
+					<thead><tr><th>Original</th><th>This port</th></tr></thead>
+					<tbody>
+						<tr><td>React 17 + Recoil atoms</td>
+							<td>Svelte 5 runes store · <code>src/lib/state.svelte.ts</code></td></tr>
+						<tr><td>Pixi.js + pixi-viewport (<code>gridGL/</code>)</td>
+							<td>Pixi.js 8 + pixi-viewport 6 · <code>src/lib/grid/pixi/</code></td></tr>
+						<tr><td>Rust/WASM formula engine</td>
+							<td>The same crate, vendored &amp; extended · <code>quadratic-core/</code></td></tr>
+						<tr><td>Pyodide + <code>run_python.py</code></td>
+							<td>Pyodide from CDN + inline prelude · <code>python/pythonRunner.ts</code></td></tr>
+						<tr><td>JS cells in a dedicated web worker</td>
+							<td>Async-function runner with the same API · <code>javascript/javascriptRunner.ts</code></td></tr>
+						<tr><td>Statement/runner transactions</td>
+							<td>Op-based transactions with captured inverses · <code>SheetController.ts</code></td></tr>
+						<tr><td><code>.grid</code> v1.3 schema</td>
+							<td>Same schema, multi-sheet, + legacy import · <code>files/gridFile.ts</code></td></tr>
+					</tbody>
+				</table>
+			</div>
+			<p class="note">Conventions carried over exactly: column A = x 0, row 0 exists, integer
+			headings with an A1 toggle, and the original example files open unchanged.</p>
+		</div>
+	</section>
+
+	<!-- A4 -->
+	<section class="slide" aria-label="Renderer">
+		<div class="frame">
+			<p class="eyebrow"><b>A4</b> · Renderer</p>
+			<h2>A WebGL grid that never redraws what it doesn't have to</h2>
+			<p class="lede">Display objects persist between frames, so panning and zooming are pure
+			viewport transforms. Layers redraw only via dirty flags, cell layers re-cull only when
+			the visible range changes, and label rasterization is budgeted per frame.</p>
+			<div class="stats">
+				<div class="stat"><div class="num bad">15.7&thinsp;s</div>
+					<div class="lbl">single blocked frame on a 13,000-cell sheet — first draft,
+					before range-gating and label budgeting</div></div>
+				<div class="stat"><div class="num good">16.6&thinsp;ms</div>
+					<div class="lbl">average frame while panning the same sheet — steady
+					60&thinsp;fps, worst frame 17.7&thinsp;ms</div></div>
+				<div class="stat"><div class="num">10%–1000%</div>
+					<div class="lbl">zoom range with pinch, ⌘+wheel, space-drag pan and
+					inertia via pixi-viewport</div></div>
+			</div>
+		</div>
+	</section>
+
+	<!-- A5 -->
+	<section class="slide" aria-label="Formula core">
+		<div class="frame">
+			<p class="eyebrow"><b>A5</b> · Formulas</p>
+			<h2 style="color: var(--formula)">The original Rust engine, then grown</h2>
+			<p class="lede">The <code>quadratic-core</code> crate is vendored and compiled with
+			<code>wasm-pack</code> (1.3&thinsp;MB wasm, lazy-loaded on first evaluation). Its
+			function library was then extended with backports from the modern core, written in the
+			old engine's idiom and covered by its test suite.</p>
+			<div class="stats">
+				<div class="stat"><div class="num">46 → 109</div>
+					<div class="lbl">functions in the registry, after backporting</div></div>
+				<div class="stat"><div class="num good">39</div>
+					<div class="lbl">Rust tests passing, including the new rounding, criteria,
+					and calendar edge cases</div></div>
+			</div>
+			<div class="fn-groups">
+				<div class="fn-group" style="border-color: var(--formula)">
+					<b>Math &amp; rounding <em>+12</em></b>
+					<span>ROUND ROUNDUP ROUNDDOWN INT CEILING FLOOR MOD POWER EXP LN LOG LOG10</span>
+				</div>
+				<div class="fn-group" style="border-color: var(--formula)">
+					<b>Criteria &amp; stats <em>+5</em></b>
+					<span>SUMIF COUNTIF AVERAGEIF COUNTA COUNTBLANK</span>
+				</div>
+				<div class="fn-group" style="border-color: var(--formula)">
+					<b>Logic <em>+7</em></b>
+					<span>IFERROR ISERROR ISBLANK ISNUMBER ISTEXT ISEVEN ISODD</span>
+				</div>
+				<div class="fn-group" style="border-color: var(--formula)">
+					<b>Lookup <em>+4</em></b>
+					<span>VLOOKUP HLOOKUP MATCH INDEX</span>
+				</div>
+				<div class="fn-group" style="border-color: var(--formula)">
+					<b>Text <em>+12</em></b>
+					<span>LEFT RIGHT MID LEN LOWER UPPER TRIM SUBSTITUTE FIND REPT TEXTJOIN CONCATENATE</span>
+				</div>
+				<div class="fn-group" style="border-color: var(--formula)">
+					<b>Date &amp; time <em>+23</em></b>
+					<span>TODAY NOW DATE TIME YEAR…SECOND EDATE EOMONTH DAYS DAYS360 DATEDIF WEEKDAY WEEKNUM ISOWEEKNUM NETWORKDAYS WORKDAY YEARFRAC</span>
+				</div>
+			</div>
+			<p class="note">Criteria strings match Excel — <code>"&gt;=10"</code>,
+			<code>"&lt;&gt;x"</code>, <code>*</code>/<code>?</code> wildcards with <code>~</code>
+			escapes. Dates are ISO strings, since this engine has no date value type; calendar math
+			is dependency-free.</p>
+		</div>
+	</section>
+
+	<!-- A6 -->
+	<section class="slide" aria-label="Languages">
+		<div class="frame">
+			<p class="eyebrow"><b>A6</b> · Code cells</p>
+			<h2>Two languages, one dependency graph</h2>
+			<div class="two-col">
+				<div>
+					<p class="lede" style="font-size: 0.98rem"><b style="color: var(--python)">Python</b>
+					runs on Pyodide (3.12) with numpy and pandas, loaded on first use. The API is the
+					original's: <code>cell()</code>, <code>getCells()</code> → DataFrame,
+					<code>cells[…]</code>; the last expression is the output.</p>
+<pre><code>total = cell(3, 6)
+df = getCells((0, 2), (3, 5), first_row_header=True)
+result = [total, total * 2]
+result                       <span class="c"># spills down</span></code></pre>
+				</div>
+				<div>
+					<p class="lede" style="font-size: 0.98rem"><b style="color: var(--javascript)">JavaScript</b>
+					follows the modern client: the returned value becomes the output, 1-D arrays
+					spill down, 2-D as rows, arrays of objects get a header row, and
+					<code>console.log</code> is captured.</p>
+<pre><code><span class="k">const</span> n = q.cells(<span class="s">'B3'</span>);
+console.log(<span class="s">'building'</span>, n, <span class="s">'rows'</span>);
+<span class="k">const</span> rows = [[<span class="s">'n'</span>, <span class="s">'squared'</span>]];
+<span class="k">for</span> (<span class="k">let</span> i = 1; i &lt;= n; i++) rows.push([i, i * i]);
+<span class="k">return</span> rows;                <span class="c">// spills as a table</span></code></pre>
+				</div>
+			</div>
+			<p class="note">Every read is recorded, so editing an input re-runs whatever depends on
+			it — the graph doesn't care which language a cell speaks. A formula can sum a table a JS
+			cell produced from a value Python computed.</p>
+		</div>
+	</section>
+
+	<!-- A7 -->
+	<section class="slide" aria-label="Workspace">
+		<div class="frame">
+			<p class="eyebrow"><b>A7</b> · Workspace</p>
+			<h2>The whole cockpit</h2>
+			<div class="cards">
+				<div class="card"><b>Menubar</b><span>File · Edit · View · Insert · Format · Help,
+				matching the modern client's layout, with a zoom stepper and code-outline toggle in
+				the corner.</span></div>
+				<div class="card"><b>Right-click menu</b><span>Run code, cut/copy/paste, copy as
+				PNG, download CSV, insert or delete rows and columns — each undoable in one
+				step.</span></div>
+				<div class="card"><b>Multiple sheets</b><span>Tabs with per-sheet colors, rename,
+				duplicate, reorder; ⌥arrows switch. All sheets persist in the file.</span></div>
+				<div class="card"><b>Formula reference</b><span>Searchable browser of all 109
+				functions — signatures, docs, examples served live from the Rust registry; click to
+				insert.</span></div>
+				<div class="card"><b>Examples gallery</b><span>The upstream example files plus two
+				written for this port, tagged by language and shipped with pre-computed
+				outputs.</span></div>
+				<div class="card"><b>Editing &amp; formats</b><span>Inline editor, bold/italic,
+				colors, alignment, wrapping, number formats; undo reverts a whole computation
+				chain.</span></div>
+			</div>
+		</div>
+	</section>
+
+	<!-- A8 -->
+	<section class="slide" aria-label="Tracking upstream">
+		<div class="frame">
+			<p class="eyebrow"><b>A8</b> · Tracking upstream</p>
+			<h2>What came back from v0.24</h2>
+			<p class="lede">The original had moved on by twenty-one minor versions. These are the
+			parts that fit this port's architecture, taken deliberately rather than wholesale.</p>
+			<ul class="checks">
+				<li>The formula function library — 63 functions, matched to the modern core's
+				semantics function by function</li>
+				<li>JavaScript as a real cell language, with the modern <code>q.cells()</code> API
+				and spill rules</li>
+				<li>Multi-sheet files and the SheetBar tab UX</li>
+				<li>The menubar layout, the grid context menu, and Copy&nbsp;as&nbsp;PNG /
+				Download&nbsp;CSV / Rerun&nbsp;all&nbsp;code</li>
+				<li>Modern visuals: blue accent cursor <code>#2463eb</code>, slate gridlines that
+				fade as you zoom out, amber JavaScript cells</li>
+				<li><code>=</code> starts a formula directly; <code>/</code> opens the cell type
+				menu</li>
+			</ul>
+			<p class="note">Skipped by choice: auth, multiplayer, and AI (out of scope); the 1-based
+			A1 overhaul (would break file compatibility); borders, merges, and the format painter
+			(a large formatting subsystem of their own).</p>
+		</div>
+	</section>
+
+	<!-- A9 -->
+	<section class="slide" aria-label="Verification">
+		<div class="frame">
+			<p class="eyebrow"><b>A9</b> · Verified in the browser</p>
+			<h2>Driven, not assumed</h2>
+			<ul class="checks">
+				<li>Cross-language chain: editing one cell rippled text → formula → formula →
+				Python in a single pass</li>
+				<li>Rust engine: <code>SUM(C2:C10) / PI()</code>, <code>IFERROR</code>,
+				<code>WORKDAY(TODAY(), 10)</code> → correct values, and the core's own parse errors
+				surfaced in the editor</li>
+				<li>JS example: changing an input rebuilt the spilled table, cleaned up stale cells,
+				and moved the dependent formula 140 → 30</li>
+				<li>One ⌘Z reverted an entire computation chain, spilled outputs included; insert-row
+				restored in one step</li>
+				<li>Upstream example files still open with fills, currency formats, and formulas
+				intact</li>
+				<li>60&thinsp;fps continuous panning on a 13k-cell sheet, at 100% and fully zoomed
+				out</li>
+			</ul>
+			<div class="commits">
+				<div class="commit"><code>531742d</code><span>SvelteKit port — model, engine, UI, Python</span></div>
+				<div class="commit"><code>9d729cc</code><span>Pixi.js 8 renderer — 15.7 s freeze → 60 fps</span></div>
+				<div class="commit"><code>b2eb521</code><span>Original Rust/WASM formula engine, vendored</span></div>
+				<div class="commit"><code>6228fb1</code><span>v0.24 backport — sheets, JS cells, functions, visuals</span></div>
+				<div class="commit"><code>1c10cdb</code><span>Date &amp; time functions</span></div>
+				<div class="commit"><code>745b588</code><span>Menubar + right-click grid menu</span></div>
+				<div class="commit"><code>199b2cf</code><span>Examples gallery</span></div>
+			</div>
+		</div>
+	</section>
+
+	<!-- A10 -->
+	<section class="slide" aria-label="Not ported">
+		<div class="frame">
+			<p class="eyebrow"><b>A10</b> · Honest ledger</p>
+			<h2>Not ported (yet)</h2>
+			<ul class="plain">
+				<li>Cell borders, merged cells, and the format painter</li>
+				<li>Fill-handle drag with series auto-complete</li>
+				<li>AI cells and SQL connection cells</li>
+				<li>Auth, sharing, and multiplayer</li>
+				<li>Formula text isn't rewritten when rows or columns shift — the modern core
+				relocates references using RC machinery this vendored parser doesn't have</li>
+				<li>The financial, engineering, database, and array function categories</li>
+			</ul>
+			<p class="note">The trade that shaped several of these: this port stays on the v1.3
+			file format and 0-based coordinates, so it can still open the original's files.</p>
+		</div>
+	</section>
+
+	<!-- A11 -->
+	<section class="slide" aria-label="Run it">
+		<div class="frame">
+			<p class="eyebrow"><b>A11</b> · Run it</p>
+			<h2>Two commands</h2>
+<pre style="max-width: 42rem"><code>npm install
+npm run dev        <span class="c"># → http://localhost:5173</span>
+
+<span class="c"># only when the Rust or the examples change:</span>
+npm run build:wasm
+npm run examples</code></pre>
+			<p class="note">The built wasm <code>pkg/</code> is committed, so the app runs without a
+			Rust toolchain. Docs live in <code>README.md</code>; this deck is
+			<code>docs/slides.html</code>.</p>
+			<div class="cursor-cell" style="margin-top: 0.4rem; padding: 0.85rem 1.5rem 0.95rem">
+				<p class="mono" style="font-size: 0.92rem">The data science spreadsheet, in SvelteKit.</p>
+			</div>
+		</div>
+	</section>
+
+</div>
+
+<button class="navbtn prev" id="prev" aria-label="Previous slide">←</button>
+<button class="navbtn next" id="next" aria-label="Next slide">→</button>
+
+<div class="hud">
+	<span class="keys">← → · home · end</span>
+	<div class="dots" id="dots" role="tablist" aria-label="Slides"></div>
+	<span class="ref" id="ref">A1 / A1:A11</span>
+</div>
+
+<script>
+	const slides = [...document.querySelectorAll('.slide')];
+	const dots = document.getElementById('dots');
+	const ref = document.getElementById('ref');
+	let current = 0;
+
+	slides.forEach((_, i) => {
+		const b = document.createElement('button');
+		b.setAttribute('aria-label', 'Slide A' + (i + 1));
+		b.addEventListener('click', () => go(i));
+		dots.appendChild(b);
+	});
+
+	function go(i) {
+		current = Math.max(0, Math.min(slides.length - 1, i));
+		slides.forEach((s, j) => s.classList.toggle('active', j === current));
+		[...dots.children].forEach((d, j) =>
+			d.setAttribute('aria-current', j === current ? 'true' : 'false')
+		);
+		ref.textContent = 'A' + (current + 1) + ' / A1:A' + slides.length;
+		history.replaceState(null, '', '#' + (current + 1));
+	}
+
+	document.getElementById('prev').addEventListener('click', () => go(current - 1));
+	document.getElementById('next').addEventListener('click', () => go(current + 1));
+
+	window.addEventListener('keydown', (e) => {
+		if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') go(current + 1);
+		else if (e.key === 'ArrowLeft' || e.key === 'PageUp') go(current - 1);
+		else if (e.key === 'Home') go(0);
+		else if (e.key === 'End') go(slides.length - 1);
+	});
+
+	const fromHash = parseInt(location.hash.slice(1), 10);
+	go(Number.isFinite(fromHash) ? fromHash - 1 : 0);
+</script>
+</body>
+</html>

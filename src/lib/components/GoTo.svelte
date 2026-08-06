@@ -1,0 +1,98 @@
+<script lang="ts">
+	import { app, gotoCell } from '../state.svelte';
+	import Modal from './Modal.svelte';
+
+	let value = $state('');
+	let inputEl: HTMLInputElement | undefined = $state();
+
+	$effect(() => {
+		inputEl?.focus();
+	});
+
+	// any string maps to valid coordinates (Quadratic's getCoordinatesFromUserInput)
+	const coords = $derived.by(() => {
+		const matches = value.match(/-?\d+/g)?.map(Number) ?? [];
+		if (matches.length === 0) return [{ x: 0, y: 0 }];
+		if (matches.length === 1) return [{ x: matches[0], y: 0 }];
+		if (matches.length === 2) return [{ x: matches[0], y: matches[1] }];
+		if (matches.length === 3)
+			return [
+				{ x: matches[0], y: matches[1] },
+				{ x: matches[2], y: matches[1] }
+			];
+		const pair = [
+			{ x: matches[0], y: matches[1] },
+			{ x: matches[2], y: matches[3] }
+		];
+		return pair[0].x === pair[1].x && pair[0].y === pair[1].y ? [pair[0]] : pair;
+	});
+
+	function close(): void {
+		app.showGoToMenu = false;
+	}
+
+	function submit(): void {
+		const [first, second] = coords;
+		if (second) gotoCell(first.x, first.y, { x1: second.x, y1: second.y });
+		else gotoCell(first.x, first.y);
+		close();
+	}
+
+	function onKeyDown(e: KeyboardEvent): void {
+		e.stopPropagation();
+		if (e.key === 'Escape') close();
+		else if (e.key === 'Enter') {
+			e.preventDefault();
+			submit();
+		}
+	}
+</script>
+
+<Modal onclose={close}>
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div onkeydown={onKeyDown}>
+		<input
+			bind:this={inputEl}
+			bind:value
+			class="search"
+			placeholder={'Enter a cell "0, 0" or range "0, 0, -5, -5"'}
+			spellcheck="false"
+		/>
+		<button class="row" onclick={submit}>
+			{#if coords.length === 2}
+				Go to range: ({coords[0].x}, {coords[0].y}), ({coords[1].x}, {coords[1].y})
+			{:else}
+				Go to cell: ({coords[0].x}, {coords[0].y})
+			{/if}
+			<span class="arrow">→</span>
+		</button>
+	</div>
+</Modal>
+
+<style>
+	.search {
+		width: 100%;
+		border: none;
+		outline: none;
+		padding: 0.9rem 1rem;
+		font-size: 0.95rem;
+		border-bottom: 1px solid #e6ebf0;
+		box-sizing: border-box;
+	}
+	.row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		width: 100%;
+		background: #e7f7ff;
+		border: none;
+		font: inherit;
+		font-size: 0.85rem;
+		padding: 0.6rem 1rem;
+		cursor: pointer;
+		text-align: left;
+	}
+	.arrow {
+		color: #55606b;
+	}
+</style>

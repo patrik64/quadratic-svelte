@@ -1,0 +1,29 @@
+node_modules
+
+# Output
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+/build
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# npm is the package manager for this repo
+pnpm-lock.yaml
+
+# Rust build artifacts (pkg/ is committed so the app builds without a Rust toolchain)
+quadratic-core/target/

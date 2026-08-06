@@ -1,0 +1,40 @@
+import type { Cell, CellFormat } from './types';
+
+/** Format a cell's raw value for display according to its CellFormat. */
+export function formatCellValue(cell: Cell | undefined, format: CellFormat | undefined): string {
+	if (!cell) return '';
+	const value = cell.value ?? '';
+	const tf = format?.textFormat;
+	if (!tf) return value;
+	const n = Number(value);
+	if (value.trim() === '' || Number.isNaN(n)) return value;
+	switch (tf.type) {
+		case 'NUMBER':
+			return n.toLocaleString('en-US', {
+				minimumFractionDigits: tf.decimalPlaces ?? 0,
+				maximumFractionDigits: tf.decimalPlaces ?? 2
+			});
+		case 'CURRENCY': {
+			const dp = tf.decimalPlaces ?? 2;
+			return `${tf.symbol ?? '$'}${n.toLocaleString('en-US', {
+				minimumFractionDigits: dp,
+				maximumFractionDigits: dp
+			})}`;
+		}
+		case 'PERCENTAGE': {
+			const dp = tf.decimalPlaces ?? 1;
+			return `${(n * 100).toLocaleString('en-US', {
+				minimumFractionDigits: 0,
+				maximumFractionDigits: dp
+			})}%`;
+		}
+		case 'EXPONENTIAL':
+			return n.toExponential(tf.decimalPlaces ?? 2);
+		default:
+			return value;
+	}
+}
+
+export function isNumericValue(value: string): boolean {
+	return value.trim() !== '' && !Number.isNaN(Number(value));
+}

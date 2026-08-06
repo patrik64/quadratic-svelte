@@ -1,0 +1,438 @@
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import { HEADING_SIZE, isCodeCellType } from '../core/types';
+	import { PixiGrid, type GridUIState } from '../grid/pixi/PixiGrid';
+	import { handleKeyDown } from '../grid/keyboard';
+	import {
+		app,
+		getSelectionRect,
+		gotoCell,
+		importCSVAt,
+		openFileFromJSON,
+		pixiRef,
+		screenToWorld,
+		sheetController
+	} from '../state.svelte';
+	import CellInput from './CellInput.svelte';
+	import GridContextMenu from './GridContextMenu.svelte';
+
+	let containerEl: HTMLDivElement | undefined = $state();
+	let cursorStyle = $state('default');
+	let pixi: PixiGrid | undefined;
+	let contextMenu = $state<{ x: number; y: number } | undefined>(undefined);
+
+	let mouseIsDown = false;
+	let spaceHeld = false;
+	let dragMode: 'none' | 'select' | 'col-resize' | 'row-resize' = 'none';
+	let resizeTarget = { index: 0, originalSize: 0, startWorld: 0 };
+	let selectOrigin: { x: number; y: number } | undefined;
+
+	function snapshot(): GridUIState {
+		return {
+			cursorPosition: app.cursorPosition,
+			multiCursor: app.multiCursor,
+			showHeadings: app.showHeadings,
+			showGridAxes: app.showGridAxes,
+			showGridLines: app.showGridLines,
+			showCellTypeOutlines: app.showCellTypeOutlines,
+			showA1Notation: app.showA1Notation,
+			presentationMode: app.presentationMode,
+			editorOpen: app.showCodeEditor,
+			editorMode: app.editorMode,
+			editorCell: app.editorCell,
+			inputOpen: app.showInput
+		};
+	}
+
+	onMount(() => {
+		const grid = new PixiGrid(() => sheetController.sheet, snapshot);
+		pixi = grid;
+		pixiRef.current = grid;
+		let disposed = false;
+		let observer: ResizeObserver | undefined;
+
+		void grid.init(containerEl!).then(() => {
+			if (disposed) return;
+			// pixi viewport is the source of truth while the user pans/zooms
+			grid.onViewportChanged = (x, y, scale) => {
+				app.viewport = { x, y, scale };
+			};
+			grid.applyViewport(app.viewport.x, app.viewport.y, app.viewport.scale);
+			observer = new ResizeObserver(() => {
+				if (containerEl) grid.resize(containerEl.clientWidth, containerEl.clientHeight);
+			});
+			observer.observe(containerEl!);
+		});
+
+		window.addEventListener('keydown', onWindowKeyDownCapture, true);
+		window.addEventListener('keydown', onWindowKeyDown);
+		window.addEventListener('keyup', onWindowKeyUp);
+		return () => {
+			disposed = true;
+			observer?.disconnect();
+			window.removeEventListener('keydown', onWindowKeyDownCapture, true);
+			window.removeEventListener('keydown', onWindowKeyDown);
+			window.removeEventListener('keyup', onWindowKeyUp);
+			grid.destroy();
+		};
+	});
+
+	// push state changes into the pixi engine via dirty flags
+	$effect(() => {
+		void app.redraw;
+		if (pixi) pixi.dirtyCells = true;
+	});
+	let lastSettings = '';
+	$effect(() => {
+		const s = snapshot(); // registers all UI-state dependencies
+		const settings = `${s.showHeadings}|${s.showGridAxes}|${s.showGridLines}|${s.showCellTypeOutlines}|${s.showA1Notation}|${s.presentationMode}`;
+		if (pixi) {
+			pixi.dirtyCursor = true;
+			if (settings !== lastSettings) pixi.dirtyViewport = true; // lines/outlines/headings visibility
+		}
+		lastSettings = settings;
+	});
+	$effect(() => {
+		const { x, y, scale } = app.viewport;
+		pixi?.applyViewport(x, y, scale);
+	});
+
+	// capture phase so Esc exits presentation mode even when a component
+	// (code editor, modal, cell input) stops propagation of bubbled keys
+	function onWindowKeyDownCapture(e: KeyboardEvent): void {
+		if (e.key === 'Escape' && app.presentationMode) {
+			app.presentationMode = false;
+			e.preventDefault();
+			e.stopPropagation();
+		}
+	}
+
+	function onWindowKeyDown(e: KeyboardEvent): void {
+		const target = e.target as HTMLElement;
+		const inField =
+			target instanceof HTMLInputElement ||
+			target instanceof HTMLTextAreaElement ||
+			target?.isContentEditable;
+		if (e.key === ' ' && !inField && !app.showInput) {
+			spaceHeld = true;
+			if (app.panMode === 'disabled') app.panMode = 'enabled';
+			e.preventDefault(); // pixi-viewport's drag plugin tracks the key itself
+			return;
+		}
+		handleKeyDown(e);
+	}
+
+	function onWindowKeyUp(e: KeyboardEvent): void {
+		if (e.key === ' ') {
+			spaceHeld = false;
+			if (mouseIsDown) return; // keep panning until mouseup
+			app.panMode = 'disabled';
+		}
+	}
+
+	function rowHeadingWidth(): number {
+		return pixi?.headings?.rowHeadingWidth ?? 0;
+	}
+
+	function cellAtScreen(sx: number, sy: number): { x: number; y: number } {
+		const w = screenToWorld(sx, sy);
+		return {
+			x: sheetController.sheet.gridOffsets.getColumnIndex(w.x),
+			y: sheetController.sheet.gridOffsets.getRowIndex(w.y)
+		};
+	}
+
+	/** Which heading edge (if any) is near screen point, for resize cursors. */
+	function hitHeadingEdge(
+		sx: number,
+		sy: number
+	): { kind: 'col' | 'row'; index: number } | undefined {
+		const offsets = sheetController.sheet.gridOffsets;
+		const rhw = rowHeadingWidth();
+		const TOLERANCE = 4;
+		if (app.showHeadings && sy < HEADING_SIZE && sx > rhw) {
+			const w = screenToWorld(sx, sy);
+			const col = offsets.getColumnIndex(w.x);
+			for (const c of [col, col + 1]) {
+				const edgeScreen = (offsets.getColumnX(c) - app.viewport.x) * app.viewport.scale;
+				if (Math.abs(sx - edgeScreen) < TOLERANCE) return { kind: 'col', index: c - 1 };
+			}
+		}
+		if (app.showHeadings && sx < rhw && sy > HEADING_SIZE) {
+			const w = screenToWorld(sx, sy);
+			const row = offsets.getRowIndex(w.y);
+			for (const r of [row, row + 1]) {
+				const edgeScreen = (offsets.getRowY(r) - app.viewport.y) * app.viewport.scale;
+				if (Math.abs(sy - edgeScreen) < TOLERANCE) return { kind: 'row', index: r - 1 };
+			}
+		}
+		return undefined;
+	}
+
+	function selectColumn(x: number, shift: boolean): void {
+		const bounds = sheetController.sheet.getBounds();
+		const y0 = bounds?.top ?? 0;
+		const y1 = bounds?.bottom ?? 0;
+		if (shift && app.multiCursor) {
+			const o = app.multiCursor.originPosition;
+			app.multiCursor = { originPosition: o, terminalPosition: { x, y: y1 } };
+		} else {
+			app.cursorPosition = { x, y: y0 };
+			app.keyboardMovePosition = { x, y: y0 };
+			app.multiCursor = { originPosition: { x, y: y0 }, terminalPosition: { x, y: y1 } };
+		}
+	}
+
+	function selectRow(y: number, shift: boolean): void {
+		const bounds = sheetController.sheet.getBounds();
+		const x0 = bounds?.left ?? 0;
+		const x1 = bounds?.right ?? 0;
+		if (shift && app.multiCursor) {
+			const o = app.multiCursor.originPosition;
+			app.multiCursor = { originPosition: o, terminalPosition: { x: x1, y } };
+		} else {
+			app.cursorPosition = { x: x0, y };
+			app.keyboardMovePosition = { x: x0, y };
+			app.multiCursor = { originPosition: { x: x0, y }, terminalPosition: { x: x1, y } };
+		}
+	}
+
+	function onContextMenu(e: MouseEvent): void {
+		e.preventDefault();
+		if (!containerEl || app.panMode !== 'disabled') return;
+		const rect = containerEl.getBoundingClientRect();
+		const sx = e.clientX - rect.left;
+		const sy = e.clientY - rect.top;
+		if (app.showHeadings && (sy < HEADING_SIZE || sx < rowHeadingWidth())) return;
+		const cell = cellAtScreen(sx, sy);
+		// right-clicking outside the selection moves the cursor first
+		const sel = getSelectionRect();
+		const inside = cell.x >= sel.x0 && cell.x <= sel.x1 && cell.y >= sel.y0 && cell.y <= sel.y1;
+		if (!inside) {
+			app.cursorPosition = cell;
+			app.keyboardMovePosition = cell;
+			app.multiCursor = undefined;
+		}
+		contextMenu = { x: e.clientX, y: e.clientY };
+	}
+
+	function onPointerDown(e: PointerEvent): void {
+		if (!containerEl) return;
+		mouseIsDown = true;
+		contextMenu = undefined;
+		if (app.panMode !== 'disabled') {
+			app.panMode = 'dragging'; // pixi-viewport performs the actual pan
+			return;
+		}
+		if (e.button !== 0) return;
+		const rect = containerEl.getBoundingClientRect();
+		const sx = e.clientX - rect.left;
+		const sy = e.clientY - rect.top;
+
+		// heading interactions
+		const edge = hitHeadingEdge(sx, sy);
+		if (edge) {
+			containerEl.setPointerCapture(e.pointerId);
+			const offsets = sheetController.sheet.gridOffsets;
+			if (edge.kind === 'col') {
+				dragMode = 'col-resize';
+				resizeTarget = {
+					index: edge.index,
+					originalSize: offsets.getColumnWidth(edge.index),
+					startWorld: screenToWorld(sx, sy).x
+				};
+			} else {
+				dragMode = 'row-resize';
+				resizeTarget = {
+					index: edge.index,
+					originalSize: offsets.getRowHeight(edge.index),
+					startWorld: screenToWorld(sx, sy).y
+				};
+			}
+			return;
+		}
+		const rhw = rowHeadingWidth();
+		if (app.showHeadings && sy < HEADING_SIZE && sx < rhw) {
+			const bounds = sheetController.sheet.getBounds();
+			if (bounds) gotoCell(bounds.left, bounds.top, { x1: bounds.right, y1: bounds.bottom });
+			return;
+		}
+		if (app.showHeadings && sy < HEADING_SIZE) {
+			selectColumn(cellAtScreen(sx, sy).x, e.shiftKey);
+			return;
+		}
+		if (app.showHeadings && sx < rhw) {
+			selectRow(cellAtScreen(sx, sy).y, e.shiftKey);
+			return;
+		}
+
+		// grid selection
+		containerEl.setPointerCapture(e.pointerId);
+		const cell = cellAtScreen(sx, sy);
+		if (e.shiftKey) {
+			app.multiCursor = {
+				originPosition: { ...app.cursorPosition },
+				terminalPosition: cell
+			};
+			app.keyboardMovePosition = cell;
+			return;
+		}
+		app.showInput = false;
+		app.cursorPosition = cell;
+		app.keyboardMovePosition = cell;
+		app.multiCursor = undefined;
+		selectOrigin = cell;
+		dragMode = 'select';
+	}
+
+	function onPointerMove(e: PointerEvent): void {
+		if (!containerEl) return;
+		const rect = containerEl.getBoundingClientRect();
+		const sx = e.clientX - rect.left;
+		const sy = e.clientY - rect.top;
+
+		if (dragMode === 'col-resize') {
+			const dw = screenToWorld(sx, sy).x - resizeTarget.startWorld;
+			sheetController.sheet.gridOffsets.setColumnWidth(
+				resizeTarget.index,
+				resizeTarget.originalSize + dw
+			);
+			app.markDirty();
+			return;
+		}
+		if (dragMode === 'row-resize') {
+			const dh = screenToWorld(sx, sy).y - resizeTarget.startWorld;
+			sheetController.sheet.gridOffsets.setRowHeight(
+				resizeTarget.index,
+				resizeTarget.originalSize + dh
+			);
+			app.markDirty();
+			return;
+		}
+		if (dragMode === 'select' && selectOrigin) {
+			const cell = cellAtScreen(sx, sy);
+			if (cell.x === selectOrigin.x && cell.y === selectOrigin.y) {
+				app.multiCursor = undefined;
+			} else {
+				app.multiCursor = {
+					originPosition: { ...selectOrigin },
+					terminalPosition: cell
+				};
+			}
+			app.keyboardMovePosition = cell;
+			return;
+		}
+
+		// hover cursor styling
+		if (app.panMode === 'enabled') cursorStyle = 'grab';
+		else if (app.panMode === 'dragging') cursorStyle = 'grabbing';
+		else {
+			const edge = hitHeadingEdge(sx, sy);
+			if (edge) cursorStyle = edge.kind === 'col' ? 'col-resize' : 'row-resize';
+			else if (app.showHeadings && (sy < HEADING_SIZE || sx < rowHeadingWidth()))
+				cursorStyle = 'pointer';
+			else cursorStyle = 'default';
+		}
+	}
+
+	function onPointerUp(): void {
+		mouseIsDown = false;
+		if (app.panMode === 'dragging') app.panMode = spaceHeld ? 'enabled' : 'disabled';
+		if (dragMode === 'col-resize' || dragMode === 'row-resize') {
+			// re-apply through a transaction so resize is undoable
+			const offsets = sheetController.sheet.gridOffsets;
+			const kind = dragMode === 'col-resize' ? 'column' : 'row';
+			const finalSize =
+				kind === 'column'
+					? offsets.getColumnWidth(resizeTarget.index)
+					: offsets.getRowHeight(resizeTarget.index);
+			if (kind === 'column') offsets.setColumnWidth(resizeTarget.index, resizeTarget.originalSize);
+			else offsets.setRowHeight(resizeTarget.index, resizeTarget.originalSize);
+			sheetController.startTransaction();
+			sheetController.execute({ type: 'setHeading', kind, id: resizeTarget.index, size: finalSize });
+			sheetController.endTransaction();
+		}
+		dragMode = 'none';
+		selectOrigin = undefined;
+	}
+
+	function onDoubleClick(e: MouseEvent): void {
+		if (!containerEl) return;
+		const rect = containerEl.getBoundingClientRect();
+		const sx = e.clientX - rect.left;
+		const sy = e.clientY - rect.top;
+		if (app.showHeadings && (sy < HEADING_SIZE || sx < rowHeadingWidth())) return;
+		const cell = cellAtScreen(sx, sy);
+		app.cursorPosition = cell;
+		app.keyboardMovePosition = cell;
+		const existing = sheetController.sheet.getCell(cell.x, cell.y);
+		if (existing && isCodeCellType(existing.type)) {
+			app.editorMode = existing.type;
+			app.editorCell = cell;
+			app.showCodeEditor = true;
+		} else {
+			app.inputInitialValue = existing?.value ?? '';
+			app.showInput = true;
+		}
+	}
+
+	async function onDrop(e: DragEvent): Promise<void> {
+		e.preventDefault();
+		const file = e.dataTransfer?.files?.[0];
+		if (!file) return;
+		const text = await file.text();
+		if (file.name.endsWith('.grid') || file.name.endsWith('.json')) {
+			openFileFromJSON(text, file.name);
+		} else if (file.name.endsWith('.csv')) {
+			const rect = containerEl?.getBoundingClientRect();
+			const at = rect
+				? cellAtScreen(e.clientX - rect.left, e.clientY - rect.top)
+				: app.cursorPosition;
+			await importCSVAt(text, at);
+		}
+	}
+
+	const containerCursor = $derived(
+		app.panMode === 'dragging' ? 'grabbing' : app.panMode === 'enabled' ? 'grab' : cursorStyle
+	);
+</script>
+
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+	bind:this={containerEl}
+	class="grid-container"
+	style:cursor={containerCursor}
+	role="application"
+	aria-label="Spreadsheet grid"
+	onpointerdown={onPointerDown}
+	onpointermove={onPointerMove}
+	onpointerup={onPointerUp}
+	ondblclick={onDoubleClick}
+	oncontextmenu={onContextMenu}
+	ondragover={(e) => e.preventDefault()}
+	ondrop={onDrop}
+>
+	{#if app.showInput}
+		<CellInput />
+	{/if}
+	{#if contextMenu}
+		<GridContextMenu
+			x={contextMenu.x}
+			y={contextMenu.y}
+			onclose={() => (contextMenu = undefined)}
+		/>
+	{/if}
+</div>
+
+<style>
+	.grid-container {
+		position: relative;
+		flex: 1;
+		overflow: hidden;
+		min-width: 0;
+	}
+	.grid-container :global(canvas.grid-canvas) {
+		display: block;
+		touch-action: none;
+	}
+</style>
