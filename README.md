@@ -3,7 +3,7 @@
 
 # Quadratic Svelte
 
-A SvelteKit reimplementation of [Quadratic](https://https://github.com/apryse/quadratic) — the data-science spreadsheet with an infinite grid, formulas, and Python cells.
+A SvelteKit reimplementation of [Quadratic](https://github.com/apryse/quadratic) — the data-science spreadsheet with an infinite grid, formulas, and Python cells.
 
 The original app is React + Recoil, renders the grid with Pixi.js (WebGL), evaluates formulas in a Rust/WASM core, and runs Python via Pyodide. This port keeps the same data model, UX, and file format while replacing each layer:
 
