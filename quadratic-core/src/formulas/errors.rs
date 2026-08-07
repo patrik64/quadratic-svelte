@@ -55,6 +55,7 @@ pub enum FormulaErrorMsg {
     NonRectangularArray,
     BadArgumentCount,
     BadFunctionName,
+    UnimplementedExcelFunction(String),
     BadCellReference,
     BadNumber,
 
@@ -100,6 +101,12 @@ impl fmt::Display for FormulaErrorMsg {
             }
             Self::BadFunctionName => {
                 write!(f, "There is no function with this name")
+            }
+            Self::UnimplementedExcelFunction(name) => {
+                write!(
+                    f,
+                    "{name} is a valid Excel function, but is not implemented in this version"
+                )
             }
             Self::BadCellReference => {
                 write!(f, "Bad cell reference")

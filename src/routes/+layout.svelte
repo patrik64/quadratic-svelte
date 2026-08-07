@@ -1,4 +1,5 @@
 <script lang="ts">
+	import '../app.css';
 	import type { Snippet } from 'svelte';
 
 	let { children }: { children: Snippet } = $props();
@@ -16,6 +17,8 @@
 		padding: 0;
 		height: 100%;
 		overflow: hidden;
+		background: var(--bg);
+		color: var(--text);
 		font-family:
 			'Open Sans',
 			-apple-system,

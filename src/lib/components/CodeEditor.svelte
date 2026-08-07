@@ -169,17 +169,29 @@
 		}
 	});
 
-	// insert requests from the formula reference (FormulaDocs)
+	// insert requests from the formula reference (FormulaDocs) and from
+	// grid pointing mode. A pointed ref remembers its span so pointing at a
+	// different cell REPLACES the previous ref (Excel-style repointing);
+	// typing anything clears the marker.
+	let lastRefSpan: { start: number; end: number } | undefined;
 	$effect(() => {
 		const text = app.pendingEditorInsert;
 		if (text && textareaEl) {
-			const start = textareaEl.selectionStart ?? code.length;
-			const end = textareaEl.selectionEnd ?? start;
+			const isRef = app.pendingInsertIsRef;
+			let start = textareaEl.selectionStart ?? code.length;
+			let end = textareaEl.selectionEnd ?? start;
+			if (isRef && lastRefSpan && start === lastRefSpan.end && end === lastRefSpan.end) {
+				start = lastRefSpan.start;
+			}
 			code = code.slice(0, start) + text + code.slice(end);
+			lastRefSpan = isRef ? { start, end: start + text.length } : undefined;
 			app.pendingEditorInsert = '';
+			app.pendingInsertIsRef = false;
+			const caret = start + text.length;
 			queueMicrotask(() => {
 				textareaEl?.focus();
-				textareaEl?.setSelectionRange(start + text.length, start + text.length);
+				textareaEl?.setSelectionRange(caret, caret);
+				caretPos = caret;
 			});
 		}
 	});
@@ -300,6 +312,7 @@
 			oninput={() => {
 				acDismissed = false;
 				acIndex = 0;
+				lastRefSpan = undefined; // typing ends ref repointing
 				updateCaret();
 			}}
 			onclick={updateCaret}
@@ -369,8 +382,8 @@
 <style>
 	.code-editor {
 		width: min(420px, 45vw);
-		border-left: 1px solid #cfd7de;
-		background: white;
+		border-left: 1px solid var(--border);
+		background: var(--panel);
 		display: flex;
 		flex-direction: column;
 		font-size: 0.85rem;
@@ -380,7 +393,7 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 0.5rem 0.75rem;
-		border-bottom: 1px solid #e6ebf0;
+		border-bottom: 1px solid var(--border-light);
 	}
 	.title {
 		display: flex;
@@ -391,11 +404,11 @@
 		font-weight: 600;
 	}
 	.cellref {
-		color: #55606b;
+		color: var(--muted);
 		font-size: 0.75rem;
 	}
 	.a1 {
-		color: #a7b2bc;
+		color: var(--faint-2);
 		margin-left: 0.4rem;
 	}
 	.actions {
@@ -419,30 +432,30 @@
 	}
 	.fx {
 		background: none;
-		border: 1px solid #cfd7de;
+		border: 1px solid var(--border);
 		border-radius: 3px;
-		color: #8c1a6a;
+		color: var(--formula);
 		padding: 0.3rem 0.6rem;
 		font: inherit;
 		font-size: 0.78rem;
 		cursor: pointer;
 	}
 	.fx:hover {
-		background: #fdf3fa;
-		border-color: #8c1a6a;
+		background: var(--hover);
+		border-color: var(--formula);
 	}
 	.close {
 		background: none;
 		border: none;
 		font-size: 1rem;
-		color: #55606b;
+		color: var(--muted);
 		cursor: pointer;
 		padding: 0.2rem 0.4rem;
 	}
 	.python-loading {
 		padding: 0.4rem 0.75rem;
-		background: #fff3cd;
-		color: #664d03;
+		background: var(--warn-bg);
+		color: var(--warn-text);
 		font-size: 0.75rem;
 	}
 	.editor-area {
@@ -467,10 +480,10 @@
 		position: absolute;
 		z-index: 70;
 		width: 280px;
-		background: white;
-		border: 1px solid #cfd7de;
+		background: var(--panel);
+		border: 1px solid var(--border);
 		border-radius: 4px;
-		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
+		box-shadow: 0 6px 20px var(--shadow);
 		font-size: 0.78rem;
 		overflow: hidden;
 	}
@@ -491,29 +504,29 @@
 		text-overflow: ellipsis;
 	}
 	.ac li.sel {
-		background: #eef4ff;
+		background: var(--accent-soft);
 	}
 	.ac-fx {
-		color: #8c1a6a;
+		color: var(--formula);
 		margin-right: 0.45rem;
 		font-style: italic;
 	}
 	.ac-doc {
-		border-top: 1px solid #e6ebf0;
+		border-top: 1px solid var(--border-light);
 		padding: 0.4rem 0.6rem;
-		background: #fafbfc;
+		background: var(--panel-2);
 	}
 	.ac-usage {
 		font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
 		font-size: 0.7rem;
-		color: #2463eb;
+		color: var(--accent);
 		margin-bottom: 0.25rem;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 	.ac-text {
-		color: #55606b;
+		color: var(--muted);
 		font-size: 0.72rem;
 		line-height: 1.4;
 		display: -webkit-box;
@@ -523,7 +536,7 @@
 		overflow: hidden;
 	}
 	.output {
-		border-top: 1px solid #e6ebf0;
+		border-top: 1px solid var(--border-light);
 		max-height: 40%;
 		overflow: auto;
 		padding: 0.5rem 0.75rem;
@@ -531,7 +544,7 @@
 	.output-header {
 		font-size: 0.65rem;
 		letter-spacing: 0.08em;
-		color: #a7b2bc;
+		color: var(--faint-2);
 		margin-bottom: 0.3rem;
 	}
 	.output-value {
@@ -539,7 +552,7 @@
 		font-size: 0.8rem;
 	}
 	.output-note {
-		color: #55606b;
+		color: var(--muted);
 		font-size: 0.75rem;
 	}
 	pre.stdout,
@@ -550,6 +563,6 @@
 		word-break: break-word;
 	}
 	pre.stderr {
-		color: #f25f5c;
+		color: var(--error);
 	}
 </style>

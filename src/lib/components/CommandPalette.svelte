@@ -26,6 +26,8 @@
 		pasteFromClipboard,
 		redo,
 		saveFile,
+		copyFormat,
+		pasteFormat,
 		setAlignment,
 		setBorders,
 		setTextFormat,
@@ -75,6 +77,8 @@
 		{ group: 'Edit', label: 'Edit: Find in all sheets', shortcut: `${C}⇧F`, action: () => { app.searchAllSheets = true; app.showSearch = true; } },
 		{ group: 'Edit', label: 'Edit: Fill down', shortcut: `${C}D`, action: () => void fillDown() },
 		{ group: 'Edit', label: 'Edit: Fill right', shortcut: `${C}R`, action: () => void fillRight() },
+		{ group: 'Edit', label: 'Edit: Copy format', shortcut: `${C}⌥C`, action: copyFormat },
+		{ group: 'Edit', label: 'Edit: Paste format', shortcut: `${C}⌥V`, action: pasteFormat },
 		{ group: 'Edit', label: 'Edit: Go to cell', shortcut: `${C}G`, action: () => (app.showGoToMenu = true) },
 		{ group: 'Edit', label: 'Edit: Copy selection as PNG', shortcut: `${C}⇧C`, action: () => void copySelectionAsPng() },
 		{ group: 'File', label: 'File: Download as CSV', shortcut: `${C}⇧E`, action: downloadSelectionAsCsv },
@@ -111,6 +115,11 @@
 		{ group: 'Text', label: 'Text: Align left', action: () => setAlignment('left') },
 		{ group: 'Text', label: 'Text: Align center', action: () => setAlignment('center') },
 		{ group: 'Text', label: 'Text: Align right', action: () => setAlignment('right') },
+		{
+			group: 'View',
+			label: 'View: Toggle dark theme',
+			action: () => (app.theme = app.theme === 'dark' ? 'light' : 'dark')
+		},
 		{ group: 'Text', label: 'Text: Overflow (no wrap)', action: () => setWrapping(undefined) },
 		{ group: 'Text', label: 'Text: Wrap', action: () => setWrapping('wrap') },
 		{ group: 'Text', label: 'Text: Clip', action: () => setWrapping('clip') },
@@ -212,7 +221,7 @@
 		outline: none;
 		padding: 0.9rem 1rem;
 		font-size: 0.95rem;
-		border-bottom: 1px solid #e6ebf0;
+		border-bottom: 1px solid var(--border-light);
 		box-sizing: border-box;
 	}
 	.list {
@@ -234,15 +243,15 @@
 		text-align: left;
 	}
 	.row.selected {
-		background: #e7f7ff;
+		background: var(--accent-soft);
 	}
 	.shortcut {
-		color: #a7b2bc;
+		color: var(--faint-2);
 		font-size: 0.75rem;
 	}
 	.empty {
 		padding: 0.75rem 1rem;
-		color: #55606b;
+		color: var(--muted);
 		font-size: 0.85rem;
 	}
 </style>

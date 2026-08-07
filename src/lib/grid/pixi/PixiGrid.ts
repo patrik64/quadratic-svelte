@@ -7,8 +7,15 @@ import { Viewport } from 'pixi-viewport';
 import { formatCellValue } from '../../core/cellTextFormatter';
 import type { Sheet } from '../../core/Sheet';
 import { coordKey, type Coordinate } from '../../core/types';
-import { colors, editorModeColor, gridLineAlpha } from '../colors';
-import { GridHeadings } from './GridHeadings';
+import {
+	colors,
+	editorModeColor,
+	gridLineAlpha,
+	setPixiTheme,
+	themeBackground,
+	type ThemeName
+} from '../colors';
+import { GridHeadings, refreshHeadingLabelStyle } from './GridHeadings';
 import { CELL_TEXT_MARGIN_LEFT, FONT_SIZE, measureWrapped } from './measureText';
 
 export interface GridUIState {
@@ -25,9 +32,21 @@ export interface GridUIState {
 	editorCell: Coordinate;
 	inputOpen: boolean;
 	fillPreview?: { x0: number; y0: number; x1: number; y1: number };
+	refPreview?: { x0: number; y0: number; x1: number; y1: number };
 }
 
 const CULL_MARGIN_CELLS = 3;
+
+/** Rough luminance check for hex colors like `#ffe9b3`. */
+function isLightColor(hex: string): boolean {
+	const m = /^#([0-9a-f]{6})$/i.exec(hex);
+	if (!m) return false;
+	const n = parseInt(m[1], 16);
+	const r = (n >> 16) & 0xff;
+	const g = (n >> 8) & 0xff;
+	const b = n & 0xff;
+	return 0.299 * r + 0.587 * g + 0.114 * b > 150;
+}
 const MAX_VISIBLE_LABELS = 6000;
 // Text rasterization is the expensive step; cap creations per frame and
 // stream the rest in on subsequent frames so panning never blocks
@@ -141,6 +160,18 @@ export class PixiGrid {
 	};
 
 	/** Apply externally-driven viewport state (zoom buttons, goto, arrows). */
+	/** Switches the Pixi palette; dirtyCells destroys the label cache, so
+	 * every label re-rasterizes with the new font color. PNG export keeps a
+	 * white background regardless of theme. */
+	setTheme(theme: ThemeName): void {
+		setPixiTheme(theme);
+		refreshHeadingLabelStyle();
+		this.app.renderer.background.color = themeBackground(theme);
+		this.dirtyCells = true;
+		this.dirtyViewport = true;
+		this.dirtyCursor = true;
+	}
+
 	applyViewport(x: number, y: number, scale: number): void {
 		if (!this.viewport) return;
 		const eps = 0.0001;
@@ -377,9 +408,15 @@ export class PixiGrid {
 			const align = format?.alignment ?? 'left';
 			const wrapping = format?.wrapping;
 			const r = offsets.getCellRect(cell.x, cell.y);
+			// light fill colors keep dark text even in the dark theme
+			const fontColor =
+				format?.textColor ??
+				(format?.fillColor && isLightColor(format.fillColor)
+					? '#000000'
+					: colors.cellFontColor);
 			// wrapped layout depends on the cell's size, so resizes re-rasterize
 			const sizeSig = wrapping === 'wrap' ? `|${r.w}x${r.h}` : '';
-			const sig = `${displayText}|${format?.bold ? 'b' : ''}${format?.italic ? 'i' : ''}|${format?.textColor ?? ''}|${align}|${wrapping ?? ''}${sizeSig}`;
+			const sig = `${displayText}|${format?.bold ? 'b' : ''}${format?.italic ? 'i' : ''}|${fontColor}|${align}|${wrapping ?? ''}${sizeSig}`;
 			let cached = this.labelCache.get(key);
 			if (cached && cached.sig !== sig) {
 				cached.text.destroy();
@@ -408,7 +445,7 @@ export class PixiGrid {
 					style: {
 						fontFamily: 'OpenSans, sans-serif',
 						fontSize: FONT_SIZE,
-						fill: format?.textColor ?? colors.cellFontColor,
+						fill: fontColor,
 						fontWeight: format?.bold ? 'bold' : 'normal',
 						fontStyle: format?.italic ? 'italic' : 'normal',
 						...(wrapping === 'wrap'
@@ -535,6 +572,19 @@ export class PixiGrid {
 			g.rect(left, top, right - left, bottom - top)
 				.fill({ color: colors.cursorCell, alpha: 0.08 })
 				.stroke({ color: colors.cursorCell, alpha: 0.7, pixelLine: true });
+		}
+
+		// formula pointing-mode preview, tinted like the formula editor
+		if (state.refPreview) {
+			const p = state.refPreview;
+			const left = offsets.getColumnX(p.x0);
+			const top = offsets.getRowY(p.y0);
+			const right = offsets.getColumnX(p.x1) + offsets.getColumnWidth(p.x1);
+			const bottom = offsets.getRowY(p.y1) + offsets.getRowHeight(p.y1);
+			const color = editorModeColor('FORMULA');
+			g.rect(left, top, right - left, bottom - top)
+				.fill({ color, alpha: 0.06 })
+				.stroke({ color, width: 2 / scale });
 		}
 
 		// code editor cell highlight

@@ -76,7 +76,7 @@
 		outline: none;
 		padding: 0.9rem 1rem;
 		font-size: 0.95rem;
-		border-bottom: 1px solid #e6ebf0;
+		border-bottom: 1px solid var(--border-light);
 		box-sizing: border-box;
 	}
 	.row {
@@ -84,7 +84,7 @@
 		align-items: center;
 		justify-content: space-between;
 		width: 100%;
-		background: #e7f7ff;
+		background: var(--accent-soft);
 		border: none;
 		font: inherit;
 		font-size: 0.85rem;
@@ -93,6 +93,6 @@
 		text-align: left;
 	}
 	.arrow {
-		color: #55606b;
+		color: var(--muted);
 	}
 </style>

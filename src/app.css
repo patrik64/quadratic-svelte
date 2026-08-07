@@ -1,0 +1,57 @@
+/* Theme custom properties. Light is the original palette; dark mirrors the
+ * slide deck's dark palette. `data-theme` on <html> is set by state.svelte.ts
+ * (persisted, defaulting to prefers-color-scheme). */
+
+:root {
+	--bg: #ffffff;
+	--panel: #ffffff;
+	--panel-2: #f7f9fb;
+	--hover: #eef2f5;
+	--text: #1f2733;
+	--muted: #55606b;
+	--faint: #8a939c;
+	--faint-2: #a7b2bc;
+	--border: #cfd7de;
+	--border-light: #e6ebf0;
+	--accent: #2463eb;
+	--accent-soft: #eef4ff;
+	--error: #f25f5c;
+	--warn-bg: #fff3cd;
+	--warn-text: #664d03;
+	--shadow: rgba(0, 0, 0, 0.14);
+	--formula: #8c1a6a;
+	--python: #3776ab;
+	--javascript: #ca8a04;
+}
+
+/* themed defaults for form controls that rely on UA styling; component
+ * class-scoped rules still win on specificity */
+input,
+textarea,
+select {
+	background: var(--panel);
+	color: var(--text);
+	caret-color: var(--text);
+}
+
+:root[data-theme='dark'] {
+	--bg: #14171b;
+	--panel: #1b1f24;
+	--panel-2: #171b20;
+	--hover: #262c34;
+	--text: #e8ebee;
+	--muted: #9aa4ad;
+	--faint: #6d7680;
+	--faint-2: #59626c;
+	--border: #343c46;
+	--border-light: #2a3038;
+	--accent: #6ea0ff;
+	--accent-soft: #1d2c47;
+	--error: #f25f5c;
+	--warn-bg: #3a2f10;
+	--warn-text: #e0c36a;
+	--shadow: rgba(0, 0, 0, 0.55);
+	--formula: #d16bb0;
+	--python: #6fa8dc;
+	--javascript: #e0b341;
+}

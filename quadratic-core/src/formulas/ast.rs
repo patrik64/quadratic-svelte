@@ -180,7 +180,14 @@ impl AstNode {
                 let func_name = &func.inner;
                 match functions::lookup_function(&func_name) {
                     Some(f) => (f.eval)(&mut *ctx, spanned_arg_values).await?,
-                    None => return Err(FormulaErrorMsg::BadFunctionName.with_span(func.span)),
+                    None => {
+                        let msg = if functions::excel::is_valid_excel_function(func_name) {
+                            FormulaErrorMsg::UnimplementedExcelFunction(func_name.to_uppercase())
+                        } else {
+                            FormulaErrorMsg::BadFunctionName
+                        };
+                        return Err(msg.with_span(func.span));
+                    }
                 }
             }
 

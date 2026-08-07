@@ -6,7 +6,11 @@ use std::collections::HashMap;
 #[macro_use]
 mod util;
 mod array;
+mod database;
 mod datetime;
+mod engineering;
+pub mod excel;
+mod financial;
 mod logic;
 mod lookup;
 mod mathematics;
@@ -31,6 +35,9 @@ pub const CATEGORIES: &[FormulaFunctionCategory] = &[
     lookup::CATEGORY,
     datetime::CATEGORY,
     array::CATEGORY,
+    database::CATEGORY,
+    engineering::CATEGORY,
+    financial::CATEGORY,
 ];
 
 lazy_static! {

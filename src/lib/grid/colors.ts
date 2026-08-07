@@ -1,6 +1,9 @@
 // Quadratic's palette, updated to the modern client's theme
-// (quadratic-client/src/app/theme/colors.ts @ v0.24).
-export const colors = {
+// (quadratic-client/src/app/theme/colors.ts @ v0.24), with a dark variant.
+// `colors` is mutated in place by setPixiTheme so every consumer (PixiGrid,
+// GridHeadings) sees the switch without import churn.
+
+const LIGHT = {
 	gridLines: '#233143', // modern slate; drawn with zoom-faded alpha
 	cellFontColor: '#000000',
 	cellColorUserText: '#8ecb89',
@@ -19,6 +22,33 @@ export const colors = {
 	quadraticSecondary: '#8ecb89',
 	error: '#f25f5c'
 };
+
+const DARK: typeof LIGHT = {
+	...LIGHT,
+	gridLines: '#2e3a4a',
+	cellFontColor: '#e8ebee',
+	cellColorUserPython: '#6fa8dc',
+	cellColorUserFormula: '#d16bb0',
+	cellColorUserJavascript: '#e0b341',
+	cursorCell: '#6ea0ff',
+	headerBackground: '#1b1f24',
+	headerSelectedBackground: 'rgba(110, 160, 255, 0.22)',
+	lightGray: '#20262d',
+	mediumGray: '#343c46',
+	darkGray: '#9aa4ad'
+};
+
+export const colors = { ...LIGHT };
+
+export type ThemeName = 'light' | 'dark';
+
+export function setPixiTheme(theme: ThemeName): void {
+	Object.assign(colors, theme === 'dark' ? DARK : LIGHT);
+}
+
+export function themeBackground(theme: ThemeName): string {
+	return theme === 'dark' ? '#14171b' : '#ffffff';
+}
 
 export type CodeEditorMode = 'FORMULA' | 'PYTHON' | 'JAVASCRIPT';
 

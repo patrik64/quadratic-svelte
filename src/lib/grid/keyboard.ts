@@ -23,8 +23,10 @@ import {
 	ensureCursorVisible,
 	switchSheetRelative,
 	insertTodayDate,
+	copyFormat,
 	copySelectionAsPng,
 	downloadSelectionAsCsv,
+	pasteFormat,
 	rerunAllCode,
 	fillDown,
 	fillRight
@@ -229,6 +231,16 @@ function openCellEditor(seed?: string): void {
 export function keyboardGrid(e: KeyboardEvent): boolean {
 	const mod = e.metaKey || e.ctrlKey;
 	const key = e.key;
+
+	// format painter (e.code because Option+letter types special chars on mac)
+	if (mod && e.altKey && e.code === 'KeyC') {
+		copyFormat();
+		return true;
+	}
+	if (mod && e.altKey && e.code === 'KeyV') {
+		pasteFormat();
+		return true;
+	}
 
 	// clipboard
 	if (mod && e.shiftKey && key.toLowerCase() === 'c') {

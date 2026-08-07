@@ -6,6 +6,7 @@ import { Sheet } from './core/Sheet';
 import { SheetController } from './core/SheetController';
 import { updateCellAndDCells } from './core/updateCellAndDCells';
 import { formatCellValue } from './core/cellTextFormatter';
+import { seriesNext } from './core/series';
 import { measureWrapped } from './grid/pixi/measureText';
 import {
 	CELL_HEIGHT,
@@ -23,12 +24,15 @@ import {
 } from './core/types';
 import {
 	DEFAULT_FILE_NAME,
+	deleteStoredFile,
 	downloadGridFile,
 	exportGridFile,
 	importGridFile,
 	loadCurrentFile,
+	loadStoredFile,
 	parseCSV,
-	saveCurrentFile
+	saveCurrentFile,
+	saveStoredFile
 } from './files/gridFile';
 
 export type EditorMode = 'FORMULA' | 'PYTHON' | 'JAVASCRIPT';
@@ -60,10 +64,18 @@ function createState() {
 	let showSearch = $state(false);
 	let searchAllSheets = $state(false);
 	let pendingEditorInsert = $state('');
+	let pendingInsertIsRef = $state(false);
 	let editorMode = $state<EditorMode>('PYTHON');
 	let editorCell = $state<Coordinate>({ x: 0, y: 0 });
 
 	// ---- settings ----
+	// light by default; dark only when the user chose it (View → Dark theme)
+	const storedTheme =
+		typeof localStorage !== 'undefined'
+			? (localStorage.getItem('quadratic-theme') as 'light' | 'dark' | null)
+			: null;
+	let theme = $state<'light' | 'dark'>(storedTheme ?? 'light');
+	if (typeof document !== 'undefined') document.documentElement.dataset.theme = theme;
 	let showHeadings = $state(true);
 	let showGridAxes = $state(true);
 	let showGridLines = $state(true);
@@ -177,6 +189,12 @@ function createState() {
 		set pendingEditorInsert(v) {
 			pendingEditorInsert = v;
 		},
+		get pendingInsertIsRef() {
+			return pendingInsertIsRef;
+		},
+		set pendingInsertIsRef(v) {
+			pendingInsertIsRef = v;
+		},
 		get editorMode() {
 			return editorMode;
 		},
@@ -212,6 +230,15 @@ function createState() {
 		},
 		set showCellTypeOutlines(v) {
 			showCellTypeOutlines = v;
+		},
+		get theme() {
+			return theme;
+		},
+		set theme(v) {
+			theme = v;
+			localStorage.setItem('quadratic-theme', v);
+			document.documentElement.dataset.theme = v;
+			pixiRef.current?.setTheme(v);
 		},
 		get showA1Notation() {
 			return showA1Notation;
@@ -403,6 +430,55 @@ export function toggleItalic(): void {
 
 export function setAlignment(alignment: CellAlignment | undefined): void {
 	setFormat({ alignment });
+}
+
+// ------------------------------------------------------------- format painter
+
+let copiedFormats:
+	| { w: number; h: number; formats: (CellFormat | undefined)[][] }
+	| undefined;
+
+/** Snapshots the selection's formats (deep-copied; `undefined` entries mean
+ * "explicitly unformatted", which pasteFormat clears — that's what makes it
+ * a painter rather than a merge). */
+export function copyFormat(): void {
+	const { x0, y0, x1, y1 } = getSelectionRect();
+	const formats: (CellFormat | undefined)[][] = [];
+	for (let y = y0; y <= y1; y++) {
+		const row: (CellFormat | undefined)[] = [];
+		for (let x = x0; x <= x1; x++) {
+			const f = sheetController.sheet.getFormat(x, y);
+			row.push(f ? (JSON.parse(JSON.stringify(f)) as CellFormat) : undefined);
+		}
+		formats.push(row);
+	}
+	copiedFormats = { w: x1 - x0 + 1, h: y1 - y0 + 1, formats };
+}
+
+/** Paints the copied format pattern over the selection, tiling when the
+ * target is larger; a smaller target still receives one full pattern from
+ * its anchor (Excel behavior). One transaction — a single undo reverts. */
+export function pasteFormat(): void {
+	if (!copiedFormats) return;
+	const { x0, y0, x1, y1 } = getSelectionRect();
+	const { w, h, formats } = copiedFormats;
+	const spanX = Math.max(x1 - x0 + 1, w);
+	const spanY = Math.max(y1 - y0 + 1, h);
+	sheetController.startTransaction();
+	for (let dy = 0; dy < spanY; dy++) {
+		for (let dx = 0; dx < spanX; dx++) {
+			const src = formats[dy % h][dx % w];
+			const x = x0 + dx;
+			const y = y0 + dy;
+			sheetController.execute({
+				type: 'setFormat',
+				x,
+				y,
+				format: src ? { ...(JSON.parse(JSON.stringify(src)) as CellFormat), x, y } : undefined
+			});
+		}
+	}
+	sheetController.endTransaction();
 }
 
 export type BorderMode =
@@ -947,6 +1023,40 @@ export function openFileFromJSON(json: string, name?: string): void {
 	zoomToFit();
 }
 
+/** Opens a file from the local store and makes it current. */
+export async function openStoredFile(id: string): Promise<void> {
+	const file = await loadStoredFile(id);
+	if (!file) return;
+	importGridFile(sheetController, file);
+	sheetController.rebuildCrossSheetDeps(findSheetRefs);
+	app.filename = file.filename ?? DEFAULT_FILE_NAME;
+	app.fileId = file.id ?? crypto.randomUUID();
+	app.cursorPosition = { x: 0, y: 0 };
+	app.multiCursor = undefined;
+	sheetController.onChange(); // autosave re-persists it as the current file
+	zoomToFit();
+}
+
+/** Copies a stored file under a new id without switching to it. */
+export async function duplicateStoredFileById(id: string): Promise<void> {
+	const file = await loadStoredFile(id);
+	if (!file) return;
+	await saveStoredFile({
+		...file,
+		id: crypto.randomUUID(),
+		filename: `${file.filename ?? DEFAULT_FILE_NAME} copy`,
+		created: Date.now(),
+		modified: Date.now()
+	});
+}
+
+/** Deletes a stored file; the open file is protected. */
+export async function deleteStoredFileById(id: string): Promise<boolean> {
+	if (id === app.fileId) return false;
+	await deleteStoredFile(id);
+	return true;
+}
+
 export async function importCSVAt(text: string, at: Coordinate): Promise<void> {
 	const rows = parseCSV(text);
 	const cells: Cell[] = [];
@@ -1034,40 +1144,6 @@ export const constants = { CELL_WIDTH, CELL_HEIGHT, HEADING_SIZE };
 export type { Cell, CellFormat, CellType, Coordinate };
 
 // ------------------------------------------------------------------ fill
-
-const TEXT_SERIES: string[][] = [
-	['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-	['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-	['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
-	['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-];
-
-/** Continuation of `values` at 0-based `step` past the end, or undefined. */
-function seriesNext(values: string[], step: number): string | undefined {
-	// arithmetic series over numbers
-	if (values.length > 0 && values.every((v) => v.trim() !== '' && !Number.isNaN(Number(v)))) {
-		const nums = values.map(Number);
-		const delta = nums.length > 1 ? nums[1] - nums[0] : 0;
-		if (nums.every((n, i) => i === 0 || Math.abs(n - nums[i - 1] - delta) < 1e-9)) {
-			const value = nums[nums.length - 1] + delta * (step + 1);
-			return String(Math.abs(value) < 1e-12 ? 0 : parseFloat(value.toPrecision(13)));
-		}
-		return undefined;
-	}
-	// day/month name series (case of the first sample wins)
-	for (const series of TEXT_SERIES) {
-		const idx = values.map((v) => series.findIndex((s) => s.toLowerCase() === v.toLowerCase()));
-		if (idx.some((i) => i < 0)) continue;
-		const consecutive = idx.every((v, i) => i === 0 || v === (idx[i - 1] + 1) % series.length);
-		if (!consecutive) continue;
-		const next = series[(idx[idx.length - 1] + 1 + step) % series.length];
-		const sample = values[0];
-		if (sample === sample.toUpperCase()) return next.toUpperCase();
-		if (sample === sample.toLowerCase()) return next.toLowerCase();
-		return next;
-	}
-	return undefined;
-}
 
 /**
  * Fills from a source rect into the adjacent target area along `axis`

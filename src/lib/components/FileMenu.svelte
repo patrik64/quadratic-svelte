@@ -1,5 +1,15 @@
 <script lang="ts">
-	import { app, newFile, openFileFromJSON, saveFile } from '../state.svelte';
+	import { onMount } from 'svelte';
+	import { listStoredFiles, type StoredFileMeta } from '../files/gridFile';
+	import {
+		app,
+		deleteStoredFileById,
+		duplicateStoredFileById,
+		newFile,
+		openFileFromJSON,
+		openStoredFile,
+		saveFile
+	} from '../state.svelte';
 
 	interface Example {
 		name: string;
@@ -61,6 +71,50 @@
 
 	let fileInput: HTMLInputElement | undefined = $state();
 	let error = $state('');
+
+	// ---- your files (local IndexedDB store) ----
+	let stored = $state<StoredFileMeta[]>([]);
+	let confirmDeleteId = $state('');
+
+	async function refreshStored(): Promise<void> {
+		try {
+			stored = await listStoredFiles();
+		} catch {
+			stored = [];
+		}
+	}
+	onMount(() => void refreshStored());
+
+	async function openStored(id: string): Promise<void> {
+		if (id === app.fileId) {
+			close();
+			return;
+		}
+		await openStoredFile(id);
+		close();
+	}
+
+	async function duplicateStored(id: string): Promise<void> {
+		await duplicateStoredFileById(id);
+		await refreshStored();
+	}
+
+	async function deleteStored(id: string): Promise<void> {
+		if (confirmDeleteId !== id) {
+			confirmDeleteId = id; // first click arms, second click deletes
+			return;
+		}
+		confirmDeleteId = '';
+		await deleteStoredFileById(id);
+		await refreshStored();
+	}
+
+	function modifiedLabel(ms: number): string {
+		if (!ms) return '';
+		const days = (Date.now() - ms) / 86_400_000;
+		if (days < 1) return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+		return new Date(ms).toLocaleDateString();
+	}
 
 	function close(): void {
 		app.showFileMenu = false;
@@ -140,6 +194,39 @@
 				<span class="entry-name">↓ Download current file</span>
 				<span class="entry-desc">Save “{app.filename}” as a .grid file.</span>
 			</button>
+			{#if stored.length > 0}
+				<div class="section-title yours">Your files</div>
+				<div class="stored-list">
+					{#each stored as f (f.id)}
+						<div class="stored" class:active={f.id === app.fileId}>
+							<button class="stored-open" onclick={() => void openStored(f.id)}>
+								<span class="stored-name">
+									{f.filename}
+									{#if f.id === app.fileId}<span class="open-badge">open</span>{/if}
+								</span>
+								<span class="stored-meta">
+									{f.sheets} {f.sheets === 1 ? 'sheet' : 'sheets'} · {modifiedLabel(f.modified)}
+								</span>
+							</button>
+							<span class="stored-actions">
+								<button
+									class="mini"
+									title="Duplicate"
+									onclick={() => void duplicateStored(f.id)}
+								>⧉</button>
+								{#if f.id !== app.fileId}
+									<button
+										class="mini danger"
+										class:armed={confirmDeleteId === f.id}
+										title={confirmDeleteId === f.id ? 'Click again to delete' : 'Delete'}
+										onclick={() => void deleteStored(f.id)}
+									>{confirmDeleteId === f.id ? 'Delete?' : '✕'}</button>
+								{/if}
+							</span>
+						</div>
+					{/each}
+				</div>
+			{/if}
 		</div>
 		<div class="section examples">
 			<div class="section-title">Examples</div>
@@ -177,7 +264,7 @@
 	.filemenu {
 		position: fixed;
 		inset: 0;
-		background: white;
+		background: var(--panel);
 		z-index: 300;
 		display: flex;
 		flex-direction: column;
@@ -188,20 +275,100 @@
 		align-items: center;
 		gap: 0.75rem;
 		padding: 1rem 1.5rem;
-		border-bottom: 1px solid #e6ebf0;
+		border-bottom: 1px solid var(--border-light);
 	}
 	.title {
 		font-weight: 600;
 		font-size: 1.1rem;
-		color: #202020;
+		color: var(--text);
 	}
 	.close {
 		margin-left: auto;
 		background: none;
 		border: none;
 		font-size: 1.1rem;
-		color: #55606b;
+		color: var(--muted);
 		cursor: pointer;
+	}
+	.section-title.yours {
+		margin-top: 1.2rem;
+	}
+	.stored-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+	}
+	.stored {
+		display: flex;
+		align-items: stretch;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--panel);
+		overflow: hidden;
+	}
+	.stored.active {
+		border-color: var(--accent);
+		background: var(--accent-soft);
+	}
+	.stored-open {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		text-align: left;
+		background: none;
+		border: none;
+		font: inherit;
+		cursor: pointer;
+		padding: 0.5rem 0.75rem;
+		min-width: 0;
+	}
+	.stored-name {
+		font-weight: 600;
+		font-size: 0.88rem;
+		color: var(--text);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.open-badge {
+		font-size: 0.62rem;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--accent);
+		border: 1px solid var(--accent);
+		border-radius: 8px;
+		padding: 0 0.4rem;
+		margin-left: 0.4rem;
+	}
+	.stored-meta {
+		font-size: 0.72rem;
+		color: var(--faint);
+	}
+	.stored-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0 0.5rem;
+	}
+	.mini {
+		background: none;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		color: var(--muted);
+		font: inherit;
+		font-size: 0.72rem;
+		cursor: pointer;
+		padding: 0.15rem 0.4rem;
+	}
+	.mini:hover {
+		background: var(--hover);
+	}
+	.mini.danger.armed {
+		background: var(--error);
+		border-color: var(--error);
+		color: white;
 	}
 	.error {
 		background: #fde8e8;
@@ -252,28 +419,28 @@
 		padding: 1px 6px;
 		border-radius: 9px;
 		border: 1px solid currentColor;
-		color: #8a939c;
+		color: var(--faint);
 	}
 	.tag.formulas {
-		color: #8c1a6a;
+		color: var(--formula);
 	}
 	.tag.python {
-		color: #3776ab;
+		color: var(--python);
 	}
 	.tag.javascript {
-		color: #ca8a04;
+		color: var(--javascript);
 	}
 	.tag.data {
-		color: #55606b;
+		color: var(--muted);
 	}
 	.tag.loading {
-		color: #2463eb;
+		color: var(--accent);
 	}
 	.section-title {
 		font-size: 0.75rem;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
-		color: #55606b;
+		color: var(--muted);
 		margin-bottom: 0.5rem;
 	}
 	.entry {
@@ -283,7 +450,7 @@
 		gap: 0.15rem;
 		width: 100%;
 		background: none;
-		border: 1px solid #e6ebf0;
+		border: 1px solid var(--border-light);
 		border-radius: 6px;
 		font: inherit;
 		text-align: left;
@@ -293,15 +460,15 @@
 	}
 	.entry:hover {
 		border-color: #6cd4ff;
-		background: #f2fbff;
+		background: var(--accent-soft);
 	}
 	.entry-name {
 		font-weight: 600;
 		font-size: 0.9rem;
-		color: #202020;
+		color: var(--text);
 	}
 	.entry-desc {
 		font-size: 0.75rem;
-		color: #55606b;
+		color: var(--muted);
 	}
 </style>

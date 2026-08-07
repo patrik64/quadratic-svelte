@@ -190,7 +190,7 @@ fn two_or_three_args(
 /// Excel-style criteria for COUNTIF/SUMIF/AVERAGEIF: a comparison prefix
 /// (`>`, `>=`, `<`, `<=`, `<>`, `=`) followed by a number or text, or a bare
 /// value; text comparison is case-insensitive and supports `*`/`?` wildcards.
-enum Criterion {
+pub(super) enum Criterion {
     CompareNumber(CompareOp, f64),
     CompareText(CompareOp, String),
     MatchText(String), // lowercase, may contain wildcards
@@ -198,7 +198,7 @@ enum Criterion {
 }
 
 #[derive(Copy, Clone, PartialEq)]
-enum CompareOp {
+pub(super) enum CompareOp {
     Eq,
     Ne,
     Lt,
@@ -208,7 +208,7 @@ enum CompareOp {
 }
 
 impl Criterion {
-    fn parse(criteria: &str) -> Self {
+    pub(super) fn parse(criteria: &str) -> Self {
         let (op, rest) = if let Some(rest) = criteria.strip_prefix(">=") {
             (Some(CompareOp::Ge), rest)
         } else if let Some(rest) = criteria.strip_prefix("<=") {
@@ -236,7 +236,7 @@ impl Criterion {
         }
     }
 
-    fn matches(&self, value: &Value) -> bool {
+    pub(super) fn matches(&self, value: &Value) -> bool {
         match self {
             Criterion::CompareNumber(op, n) => match value.to_number() {
                 Ok(v) => {

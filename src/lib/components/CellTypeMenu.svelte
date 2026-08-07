@@ -15,24 +15,24 @@
 		{
 			name: 'Python',
 			mode: 'PYTHON',
-			color: '#3776ab',
+			color: 'var(--python)',
 			description: 'Script with Pandas, NumPy, Micropip, and more.'
 		},
 		{
 			name: 'Formula',
 			mode: 'FORMULA',
-			color: '#8c1a6a',
+			color: 'var(--formula)',
 			description: 'Classic spreadsheet logic like SUM, AVERAGE, and more.'
 		},
 		{
 			name: 'JavaScript',
 			mode: 'JAVASCRIPT',
-			color: '#ca8a04',
+			color: 'var(--javascript)',
 			description: 'Script with modern JavaScript; return a value to the sheet.'
 		},
 		{
 			name: 'SQL Query',
-			color: '#a7b2bc',
+			color: 'var(--faint-2)',
 			description: 'Import your data with queries.',
 			disabled: true,
 			chip: 'Coming soon'
@@ -138,7 +138,7 @@
 		outline: none;
 		padding: 0.9rem 1rem;
 		font-size: 0.95rem;
-		border-bottom: 1px solid #e6ebf0;
+		border-bottom: 1px solid var(--border-light);
 		box-sizing: border-box;
 	}
 	.list {
@@ -158,7 +158,7 @@
 		cursor: pointer;
 	}
 	.option.selected {
-		background: #e7f7ff;
+		background: var(--accent-soft);
 	}
 	.option.disabled {
 		cursor: default;
@@ -185,21 +185,21 @@
 		font-size: 0.85rem;
 	}
 	.desc {
-		color: #55606b;
+		color: var(--muted);
 		font-size: 0.75rem;
 	}
 	.chip {
 		margin-left: auto;
 		font-size: 0.65rem;
-		border: 1px solid #cfd7de;
+		border: 1px solid var(--border);
 		border-radius: 10px;
 		padding: 2px 8px;
-		color: #55606b;
+		color: var(--muted);
 		white-space: nowrap;
 	}
 	.empty {
 		padding: 0.75rem 1rem;
-		color: #55606b;
+		color: var(--muted);
 		font-size: 0.85rem;
 	}
 </style>

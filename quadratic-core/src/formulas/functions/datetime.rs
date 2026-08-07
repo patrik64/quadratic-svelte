@@ -39,7 +39,7 @@ fn days_in_month(y: i64, m: u32) -> u32 {
 }
 
 /// Days since 1970-01-01 (Hinnant's `days_from_civil`).
-fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
+pub(super) fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
     let era = if y >= 0 { y } else { y - 399 } / 400;
     let yoe = y - era * 400; // [0, 399]
@@ -102,7 +102,7 @@ fn split_ints(s: &str, sep: char) -> Option<Vec<i64>> {
 
 /// Parses a date from ISO (`2026-08-06`, `2026/8/6`), US (`8/6/2026`), or
 /// EU-dotted (`6.8.2026`) forms. Returns (year, month, day).
-fn parse_date_str(s: &str) -> Option<(i64, u32, u32)> {
+pub(super) fn parse_date_str(s: &str) -> Option<(i64, u32, u32)> {
     let s = s.trim();
     let (y, m, d) = if let Some(v) = split_ints(s, '-').filter(|v| v.len() == 3) {
         (v[0], v[1], v[2])

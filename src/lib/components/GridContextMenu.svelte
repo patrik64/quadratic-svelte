@@ -121,10 +121,10 @@
 	.ctx {
 		position: fixed;
 		z-index: 250;
-		background: white;
-		border: 1px solid #cfd7de;
+		background: var(--panel);
+		border: 1px solid var(--border);
 		border-radius: 4px;
-		box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+		box-shadow: 0 6px 24px var(--shadow);
 		min-width: 220px;
 		padding: 4px 0;
 		font-size: 0.82rem;
@@ -141,17 +141,17 @@
 		text-align: left;
 		padding: 0.35rem 1rem;
 		cursor: pointer;
-		color: #202020;
+		color: var(--text);
 	}
 	.item:hover {
-		background: #eef4ff;
+		background: var(--accent-soft);
 	}
 	.key {
-		color: #a7b2bc;
+		color: var(--faint-2);
 		font-size: 0.72rem;
 	}
 	.sep {
-		border-top: 1px solid #e6ebf0;
+		border-top: 1px solid var(--border-light);
 		margin: 4px 0;
 	}
 </style>

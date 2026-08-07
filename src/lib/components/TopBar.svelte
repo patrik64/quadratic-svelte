@@ -20,6 +20,8 @@
 		redo,
 		rerunAllCode,
 		saveFile,
+		copyFormat,
+		pasteFormat,
 		setAlignment,
 		setBorders,
 		setFormat,
@@ -46,8 +48,8 @@
 	let csvInput: HTMLInputElement | undefined = $state();
 	let borderColor = $state('#000000');
 
-	const TEXT_COLORS = ['#000000', '#f25f5c', '#ffc800', '#8ecb89', '#3776ab', '#8c1a6a', '#5d576b', '#ffffff'];
-	const FILL_COLORS = ['#fde8e8', '#fff3cd', '#e2f0d9', '#e7f7ff', '#ece3f0', '#f6f8fa', '#ffffff'];
+	const TEXT_COLORS = ['#000000', 'var(--error)', '#ffc800', '#8ecb89', 'var(--python)', 'var(--formula)', '#5d576b', '#ffffff'];
+	const FILL_COLORS = ['#fde8e8', 'var(--warn-bg)', '#e2f0d9', 'var(--accent-soft)', '#ece3f0', 'var(--panel-2)', '#ffffff'];
 
 	function startRename(): void {
 		nameDraft = app.filename;
@@ -146,6 +148,13 @@
 			<button class="menu-item" onclick={() => void fillRight()}>
 				<span>Fill right</span><span class="shortcut">{C}R</span>
 			</button>
+			<div class="menu-divider"></div>
+			<button class="menu-item" onclick={copyFormat}>
+				<span>Copy format</span><span class="shortcut">{C}⌥C</span>
+			</button>
+			<button class="menu-item" onclick={pasteFormat}>
+				<span>Paste format</span><span class="shortcut">{C}⌥V</span>
+			</button>
 		</DropdownMenu>
 
 		<DropdownMenu label="View">
@@ -163,6 +172,9 @@
 			</button>
 			<button class="menu-item" onclick={() => (app.showA1Notation = !app.showA1Notation)}>
 				<span>{app.showA1Notation ? '✓' : ' '} Show A1 notation on headings</span>
+			</button>
+			<button class="menu-item" onclick={() => (app.theme = app.theme === 'dark' ? 'light' : 'dark')}>
+				<span>{app.theme === 'dark' ? '✓' : ' '} Dark theme</span>
 			</button>
 			<div class="menu-divider"></div>
 			<div class="menu-header">Zoom</div>
@@ -321,7 +333,7 @@
 			</button>
 			<button
 				class="menu-item"
-				onclick={() => window.open('https://github.com/quadratichq/quadratic', '_blank')}
+				onclick={() => window.open('https://github.com/patrik64/quadratic-svelte', '_blank')}
 			>
 				Quadratic on GitHub ↗
 			</button>
@@ -428,9 +440,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		background: white;
-		border-bottom: 1px solid #cfd7de;
-		color: #55606b;
+		background: var(--panel);
+		border-bottom: 1px solid var(--border);
+		color: var(--muted);
 		padding: 0.15rem 1rem 0.15rem 0.75rem;
 		font-size: 0.85rem;
 		user-select: none;
@@ -460,9 +472,9 @@
 	.cluster {
 		display: inline-flex;
 		align-items: center;
-		border: 1px solid #e3e8ec;
+		border: 1px solid var(--border-light);
 		border-radius: 6px;
-		background: #fbfcfd;
+		background: var(--panel-2);
 		padding: 1px;
 		gap: 1px;
 	}
@@ -476,20 +488,20 @@
 		border: none;
 		border-radius: 5px;
 		background: none;
-		color: #55606b;
+		color: var(--muted);
 		cursor: pointer;
 	}
 	.tool:hover {
 		background: #e9eef3;
-		color: #202020;
+		color: var(--text);
 	}
 	.tool:focus-visible {
-		outline: 2px solid #2463eb;
+		outline: 2px solid var(--accent);
 		outline-offset: -1px;
 	}
 	.tool.on {
 		background: #e4edff;
-		color: #2463eb;
+		color: var(--accent);
 	}
 	.zoom :global(.trigger) {
 		padding: 0.15rem 0.35rem;
@@ -500,13 +512,13 @@
 		background: #e9eef3;
 	}
 	.local {
-		color: #cfd7de;
+		color: var(--border);
 	}
 	.filename {
 		background: none;
 		border: none;
 		font: inherit;
-		color: #55606b;
+		color: var(--muted);
 		cursor: pointer;
 		max-width: 25vw;
 		overflow: hidden;
@@ -516,12 +528,12 @@
 		border-radius: 3px;
 	}
 	.filename:hover {
-		background: #f6f8fa;
+		background: var(--panel-2);
 	}
 	.name-input {
 		font: inherit;
 		text-align: center;
-		border: 1px solid #2463eb;
+		border: 1px solid var(--accent);
 		border-radius: 3px;
 		outline: none;
 		padding: 0.15rem 0.4rem;
@@ -542,13 +554,13 @@
 		margin-right: 0.35rem;
 	}
 	.lang.python {
-		background: #3776ab;
+		background: var(--python);
 	}
 	.lang.javascript {
-		background: #ca8a04;
+		background: var(--javascript);
 	}
 	.lang.formula {
-		background: #8c1a6a;
+		background: var(--formula);
 	}
 	.swatches {
 		display: flex;
@@ -558,13 +570,13 @@
 	.swatch {
 		width: 20px;
 		height: 20px;
-		border: 1px solid #cfd7de;
+		border: 1px solid var(--border);
 		border-radius: 3px;
 		cursor: pointer;
 		padding: 0;
 	}
 	.swatch.active {
-		outline: 2px solid #2463eb;
+		outline: 2px solid var(--accent);
 		outline-offset: 1px;
 	}
 </style>

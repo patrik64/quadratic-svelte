@@ -340,7 +340,7 @@
 			<p class="lede">Porting the data-science spreadsheet — infinite WebGL grid, a Rust
 			formula core, Python and JavaScript cells — from React to SvelteKit, then tracking the
 			original as it moved on.</p>
-			<p class="note mono">quadratic-svelte · August 2026 · 22 commits · main @ 3bfcc91</p>
+			<p class="note mono">quadratic-svelte · August 2026 · 33 commits · main @ 5565496</p>
 		</div>
 	</section>
 
@@ -392,7 +392,7 @@
 						<tr><td><code>.grid</code> v1.3 schema</td>
 							<td>Same schema, multi-sheet, + legacy import · <code>files/gridFile.ts</code></td></tr>
 						<tr><td>localforage local-file store</td>
-							<td>IndexedDB autosave, quota errors surfaced in the status bar</td></tr>
+							<td>Per-file IndexedDB store with autosave and a "Your files" list; quota errors surfaced</td></tr>
 					</tbody>
 				</table>
 			</div>
@@ -433,11 +433,11 @@
 			function library was then extended with backports from the modern core, written in the
 			old engine's idiom and covered by its test suite.</p>
 			<div class="stats">
-				<div class="stat"><div class="num">46 → 115</div>
+				<div class="stat"><div class="num">46 → 155</div>
 					<div class="lbl">functions in the registry, after backporting</div></div>
-				<div class="stat"><div class="num good">47</div>
+				<div class="stat"><div class="num good">62</div>
 					<div class="lbl">Rust tests passing — rounding, criteria, calendar,
-					reference-rewrite, and array edge cases</div></div>
+					reference-rewrite, array, and financial edge cases</div></div>
 			</div>
 			<div class="fn-groups">
 				<div class="fn-group" style="border-color: var(--formula)">
@@ -468,11 +468,23 @@
 					<b>Array <em>+6</em></b>
 					<span>TRANSPOSE SEQUENCE UNIQUE SORT FILTER SUMPRODUCT — results spill from the formula's cell</span>
 				</div>
+				<div class="fn-group" style="border-color: var(--formula)">
+					<b>Database <em>+12</em></b>
+					<span>DSUM DAVERAGE DCOUNT DCOUNTA DGET DMAX DMIN DPRODUCT DSTDEV DSTDEVP DVAR DVARP</span>
+				</div>
+				<div class="fn-group" style="border-color: var(--formula)">
+					<b>Engineering <em>+7</em></b>
+					<span>BITAND BITOR BITXOR BITLSHIFT BITRSHIFT DELTA GESTEP</span>
+				</div>
+				<div class="fn-group" style="border-color: var(--formula)">
+					<b>Financial <em>+21</em></b>
+					<span>PMT FV PV NPER RATE IPMT PPMT ISPMT CUMIPMT CUMPRINC SLN SYD DB DDB VDB NPV IRR MIRR XNPV XIRR FVSCHEDULE</span>
+				</div>
 			</div>
 			<p class="note">Criteria strings match Excel — <code>"&gt;=10"</code>,
 			<code>"&lt;&gt;x"</code>, <code>*</code>/<code>?</code> wildcards with <code>~</code>
 			escapes. Dates are ISO strings, since this engine has no date value type. The formula
-			editor autocompletes all 115 from the core's own Monaco LSP export — the first argument
+			editor autocompletes all 155 from the core's own Monaco LSP export — the first argument
 			placeholder arrives selected for type-over.</p>
 		</div>
 	</section>
@@ -525,7 +537,7 @@ console.log(<span class="s">'building'</span>, n, <span class="s">'rows'</span>)
 				step.</span></div>
 				<div class="card"><b>Multiple sheets</b><span>Tabs with per-sheet colors, rename,
 				duplicate, reorder; ⌥arrows switch. All sheets persist in the file.</span></div>
-				<div class="card"><b>Formula reference</b><span>Searchable browser of all 115
+				<div class="card"><b>Formula reference</b><span>Searchable browser of all 155
 				functions — signatures, docs, examples served live from the Rust registry; click to
 				insert.</span></div>
 				<div class="card"><b>Examples gallery</b><span>The upstream example files plus two
@@ -602,9 +614,45 @@ console.log(<span class="s">'building'</span>, n, <span class="s">'rows'</span>)
 	</section>
 
 	<!-- A10 -->
+	<section class="slide" aria-label="The third wave">
+		<div class="frame">
+			<p class="eyebrow"><b>A10</b> · The third wave</p>
+			<h2>Hardening, then homesteading</h2>
+			<p class="lede">With parity closed, the next wave went after correctness debts and the
+			features that make the port a daily driver rather than a demo.</p>
+			<ul class="checks">
+				<li>A vitest suite over the TS core — 80 tests whose <em>first run</em> caught a live
+				bug: negative cell refs like <code>nA7</code> parsed as column "NA"</li>
+				<li><code>#SPILL!</code> semantics replace v0.3's silent overwrite — blocked arrays
+				error instead of destroying cells, un-spill automatically when the blocker
+				clears, and survive undo, reload, and row shifts</li>
+				<li>40 more functions (155 total): financial with Newton&thinsp;+&thinsp;bisection rate
+				solvers, database criteria, engineering bitwise — and unknown Excel names are
+				now called out: "XLOOKUP is a valid Excel function, but…"</li>
+				<li>Formula pointing (click or drag the grid to insert refs, Excel-style
+				repointing), a format painter on ⌘⌥C/V, and hover cards over code and error
+				cells</li>
+				<li>A dark theme: ~180 hardcoded colors collapsed into 20 custom properties plus
+				a switchable Pixi palette — light by default, remembered per browser</li>
+				<li><code>npm run build</code> now emits a host-anywhere static site, and a local
+				file manager keeps every grid in a per-id IndexedDB store — "Your files" in ⌘O,
+				New grid no longer overwrites, the last open file returns on the next visit</li>
+			</ul>
+			<div class="commits">
+				<div class="commit"><code>6b6c6f3</code><span>Vitest suite · negative-ref parsing fix</span></div>
+				<div class="commit"><code>f2aca16</code><span>#SPILL! errors replace silent overwrites</span></div>
+				<div class="commit"><code>df9b020</code><span>Financial, database, engineering functions</span></div>
+				<div class="commit"><code>1c58f77</code><span>Pointing, format painter, hover cards, dark theme</span></div>
+				<div class="commit"><code>83c3440</code><span>Deployable static build</span></div>
+				<div class="commit"><code>cf9b90d</code><span>Local multi-file manager</span></div>
+			</div>
+		</div>
+	</section>
+
+	<!-- A11 -->
 	<section class="slide" aria-label="Verification">
 		<div class="frame">
-			<p class="eyebrow"><b>A10</b> · Verified in the browser</p>
+			<p class="eyebrow"><b>A11</b> · Verified in the browser</p>
 			<h2>Driven, not assumed</h2>
 			<ul class="checks">
 				<li>Cross-language chain: editing one cell rippled text → formula → formula →
@@ -633,31 +681,30 @@ console.log(<span class="s">'building'</span>, n, <span class="s">'rows'</span>)
 		</div>
 	</section>
 
-	<!-- A11 -->
+	<!-- A12 -->
 	<section class="slide" aria-label="Not ported">
 		<div class="frame">
-			<p class="eyebrow"><b>A11</b> · Honest ledger</p>
+			<p class="eyebrow"><b>A12</b> · Honest ledger</p>
 			<h2>Not ported (yet)</h2>
 			<ul class="plain">
+				<li>Merged cells</li>
 				<li>AI cells and SQL connection cells</li>
 				<li>Auth, sharing, and multiplayer</li>
-				<li>The format painter</li>
-				<li>The financial, engineering, and database function categories</li>
 				<li>The Electron desktop shell</li>
 			</ul>
-			<p class="note">Merged cells aren't on this list because the original doesn't have them
-			either. The trade that shaped the rest: this port stays on the v1.3 file format and
-			0-based coordinates, so it can still open the original's files.</p>
+			<p class="note">The trade that shaped several of these: this port stays on the v1.3
+			file format and 0-based coordinates, so it can still open the original's files.</p>
 		</div>
 	</section>
 
-	<!-- A12 -->
+	<!-- A13 -->
 	<section class="slide" aria-label="Run it">
 		<div class="frame">
-			<p class="eyebrow"><b>A12</b> · Run it</p>
-			<h2>Two commands</h2>
+			<p class="eyebrow"><b>A13</b> · Run it</p>
+			<h2>Three commands</h2>
 <pre style="max-width: 42rem"><code>npm install
 npm run dev        <span class="c"># → http://localhost:5173</span>
+npm run build      <span class="c"># → static build/, host anywhere</span>
 
 <span class="c"># only when the Rust or the examples change:</span>
 npm run build:wasm

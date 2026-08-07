@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { HEADING_SIZE, isCodeCellType } from '../core/types';
+	import { getCellA1Notation } from '../core/a1';
+	import { HEADING_SIZE, isCodeCellType, type Cell } from '../core/types';
+	import { editorModeColor } from '../grid/colors';
 	import { PixiGrid, type GridUIState } from '../grid/pixi/PixiGrid';
 	import { handleKeyDown } from '../grid/keyboard';
 	import {
@@ -25,11 +27,63 @@
 
 	let mouseIsDown = false;
 	let spaceHeld = false;
-	let dragMode: 'none' | 'select' | 'col-resize' | 'row-resize' | 'fill' = 'none';
+	let dragMode: 'none' | 'select' | 'col-resize' | 'row-resize' | 'fill' | 'ref' = 'none';
 	let resizeTarget = { index: 0, originalSize: 0, startWorld: 0 };
 	let selectOrigin: { x: number; y: number } | undefined;
 	let fillSource: { x0: number; y0: number; x1: number; y1: number } | undefined;
 	let fillPreview = $state<{ x0: number; y0: number; x1: number; y1: number } | undefined>();
+	// hover card over code/error cells: the timer doubles as the throttle
+	let hoverCard = $state<{ sx: number; sy: number; cell: Cell } | undefined>();
+	let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+	let hoverKey = '';
+
+	function clearHover(): void {
+		clearTimeout(hoverTimer);
+		hoverKey = '';
+		hoverCard = undefined;
+	}
+
+	function hoverInfo(cell: Cell): { label: string; color: string; body: string } {
+		const err = cell.evaluation_result?.success === false;
+		const label =
+			cell.type === 'PYTHON'
+				? 'Python'
+				: cell.type === 'JAVASCRIPT'
+					? 'JavaScript'
+					: cell.type === 'FORMULA'
+						? 'Formula'
+						: 'Cell';
+		const code = cell.formula_code ?? cell.python_code ?? cell.javascript_code ?? '';
+		const body = err ? (cell.evaluation_result?.std_err ?? 'Error') : code;
+		return {
+			label: err ? `${label} · error` : label,
+			color:
+				err || !isCodeCellType(cell.type)
+					? 'var(--error)'
+					: editorModeColor(cell.type),
+			body: body.split('\n').slice(0, 4).join('\n')
+		};
+	}
+
+	// formula pointing mode: clicking/dragging the grid inserts a reference
+	let refOrigin: { x: number; y: number } | undefined;
+	let refPointed: { x: number; y: number } | undefined;
+	let refPreview = $state<{ x0: number; y0: number; x1: number; y1: number } | undefined>();
+
+	/** Inserts (or, while dragging, re-inserts) a ref into the formula editor. */
+	function sendRefInsert(a: { x: number; y: number }, b: { x: number; y: number }): void {
+		const x0 = Math.min(a.x, b.x);
+		const y0 = Math.min(a.y, b.y);
+		const x1 = Math.max(a.x, b.x);
+		const y1 = Math.max(a.y, b.y);
+		refPreview = { x0, y0, x1, y1 };
+		const ref =
+			x0 === x1 && y0 === y1
+				? getCellA1Notation(x0, y0)
+				: `${getCellA1Notation(x0, y0)}:${getCellA1Notation(x1, y1)}`;
+		app.pendingInsertIsRef = true;
+		app.pendingEditorInsert = ref;
+	}
 
 	function snapshot(): GridUIState {
 		return {
@@ -45,7 +99,8 @@
 			editorMode: app.editorMode,
 			editorCell: app.editorCell,
 			inputOpen: app.showInput,
-			fillPreview
+			fillPreview,
+			refPreview
 		};
 	}
 
@@ -63,6 +118,7 @@
 				app.viewport = { x, y, scale };
 			};
 			grid.applyViewport(app.viewport.x, app.viewport.y, app.viewport.scale);
+			grid.setTheme(app.theme);
 			observer = new ResizeObserver(() => {
 				if (containerEl) grid.resize(containerEl.clientWidth, containerEl.clientHeight);
 			});
@@ -235,6 +291,7 @@
 		if (!containerEl) return;
 		mouseIsDown = true;
 		contextMenu = undefined;
+		clearHover();
 		if (app.panMode !== 'disabled') {
 			app.panMode = 'dragging'; // pixi-viewport performs the actual pan
 			return;
@@ -287,6 +344,18 @@
 		}
 		if (app.showHeadings && sx < rhw) {
 			selectRow(cellAtScreen(sx, sy).y, e.shiftKey);
+			return;
+		}
+
+		// formula pointing mode: a grid click inserts the cell's reference
+		// into the open formula editor instead of moving the cursor
+		if (app.showCodeEditor && app.editorMode === 'FORMULA' && !e.shiftKey) {
+			containerEl.setPointerCapture(e.pointerId);
+			const pointed = cellAtScreen(sx, sy);
+			refOrigin = pointed;
+			refPointed = pointed;
+			sendRefInsert(pointed, pointed);
+			dragMode = 'ref';
 			return;
 		}
 
@@ -347,6 +416,15 @@
 			}
 			return;
 		}
+		if (dragMode === 'ref' && refOrigin) {
+			const cell = cellAtScreen(sx, sy);
+			// re-insert live while dragging; the editor replaces the last ref
+			if (cell.x !== refPointed?.x || cell.y !== refPointed?.y) {
+				refPointed = cell;
+				sendRefInsert(refOrigin, cell);
+			}
+			return;
+		}
 		if (dragMode === 'select' && selectOrigin) {
 			const cell = cellAtScreen(sx, sy);
 			if (cell.x === selectOrigin.x && cell.y === selectOrigin.y) {
@@ -372,11 +450,37 @@
 				cursorStyle = 'pointer';
 			else cursorStyle = 'default';
 		}
+
+		// hover card for code and error cells
+		const overGrid =
+			!mouseIsDown &&
+			app.panMode === 'disabled' &&
+			(!app.showHeadings || (sy >= HEADING_SIZE && sx >= rowHeadingWidth()));
+		const hovered = overGrid ? cellAtScreen(sx, sy) : undefined;
+		const hcell = hovered ? sheetController.sheet.getCell(hovered.x, hovered.y) : undefined;
+		const interesting =
+			hcell && (isCodeCellType(hcell.type) || hcell.evaluation_result?.success === false);
+		const key = interesting && hovered ? `${hovered.x},${hovered.y}` : '';
+		if (key !== hoverKey) {
+			clearTimeout(hoverTimer);
+			hoverKey = key;
+			hoverCard = undefined;
+			if (interesting && hcell) {
+				hoverTimer = setTimeout(() => (hoverCard = { sx, sy, cell: hcell }), 150);
+			}
+		}
 	}
 
 	function onPointerUp(): void {
 		mouseIsDown = false;
 		if (app.panMode === 'dragging') app.panMode = spaceHeld ? 'enabled' : 'disabled';
+		if (dragMode === 'ref') {
+			dragMode = 'none';
+			refOrigin = undefined;
+			refPointed = undefined;
+			refPreview = undefined;
+			return;
+		}
 		if (dragMode === 'fill' && fillSource && fillPreview) {
 			const source = fillSource;
 			const preview = fillPreview;
@@ -420,6 +524,8 @@
 
 	function onDoubleClick(e: MouseEvent): void {
 		if (!containerEl) return;
+		// pointing mode owns grid clicks; don't retarget the editor
+		if (app.showCodeEditor && app.editorMode === 'FORMULA') return;
 		const rect = containerEl.getBoundingClientRect();
 		const sx = e.clientX - rect.left;
 		const sy = e.clientY - rect.top;
@@ -469,6 +575,7 @@
 	onpointerdown={onPointerDown}
 	onpointermove={onPointerMove}
 	onpointerup={onPointerUp}
+	onpointerleave={clearHover}
 	ondblclick={onDoubleClick}
 	oncontextmenu={onContextMenu}
 	ondragover={(e) => e.preventDefault()}
@@ -487,6 +594,19 @@
 			onclose={() => (contextMenu = undefined)}
 		/>
 	{/if}
+	{#if hoverCard}
+		{@const info = hoverInfo(hoverCard.cell)}
+		<div
+			class="hover-card"
+			style:left="{Math.max(0, Math.min(hoverCard.sx + 14, (containerEl?.clientWidth ?? 400) - 330))}px"
+			style:top="{hoverCard.sy + 190 > (containerEl?.clientHeight ?? 300)
+				? hoverCard.sy - 160
+				: hoverCard.sy + 18}px"
+		>
+			<div class="hc-head" style:color={info.color}>{info.label}</div>
+			<pre class="hc-body">{info.body}</pre>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -499,5 +619,34 @@
 	.grid-container :global(canvas.grid-canvas) {
 		display: block;
 		touch-action: none;
+	}
+	.hover-card {
+		position: absolute;
+		z-index: 55;
+		max-width: 320px;
+		background: var(--panel);
+		border: 1px solid var(--border);
+		border-radius: 5px;
+		box-shadow: 0 4px 16px var(--shadow);
+		padding: 0.4rem 0.6rem;
+		pointer-events: none;
+	}
+	.hc-head {
+		font-size: 0.68rem;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		margin-bottom: 0.25rem;
+	}
+	.hc-body {
+		margin: 0;
+		font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+		font-size: 0.72rem;
+		line-height: 1.45;
+		color: var(--text);
+		white-space: pre-wrap;
+		word-break: break-word;
+		max-height: 6.5rem;
+		overflow: hidden;
 	}
 </style>

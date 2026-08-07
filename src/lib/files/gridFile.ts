@@ -6,7 +6,17 @@ export const DEFAULT_FILE_NAME = 'Untitled';
 const LEGACY_LOCAL_STORAGE_KEY = 'quadratic-svelte-file';
 const DB_NAME = 'quadratic-svelte';
 const DB_STORE = 'files';
-const CURRENT_FILE_KEY = 'current-file';
+/** Pre-multi-file single slot; migrated to a per-id record on first load. */
+const LEGACY_SINGLE_KEY = 'current-file';
+/** Points at the id of the file that should open on the next visit. */
+const CURRENT_ID_KEY = 'current-id';
+
+export interface StoredFileMeta {
+	id: string;
+	filename: string;
+	modified: number;
+	sheets: number;
+}
 
 export function exportGridFile(sc: SheetController, filename: string, id: string): GridFile {
 	return {
@@ -99,44 +109,112 @@ function openDb(): Promise<IDBDatabase> {
 	});
 }
 
-/** Persists the current file. Throws on failure so callers can surface it. */
-export async function saveCurrentFile(file: GridFile): Promise<void> {
+/** Runs `use` inside one transaction; resolves when the transaction commits. */
+async function withStore<T>(
+	mode: IDBTransactionMode,
+	use: (store: IDBObjectStore, collect: (req: IDBRequest) => void) => void
+): Promise<T | undefined> {
 	const db = await openDb();
 	try {
-		await new Promise<void>((resolve, reject) => {
-			const tx = db.transaction(DB_STORE, 'readwrite');
-			tx.objectStore(DB_STORE).put(file, CURRENT_FILE_KEY);
-			tx.oncomplete = () => resolve();
-			tx.onerror = () => reject(tx.error ?? new Error('IndexedDB write failed'));
-			tx.onabort = () => reject(tx.error ?? new Error('IndexedDB write aborted'));
+		return await new Promise<T | undefined>((resolve, reject) => {
+			const tx = db.transaction(DB_STORE, mode);
+			let last: IDBRequest | undefined;
+			use(tx.objectStore(DB_STORE), (req) => (last = req));
+			tx.oncomplete = () => resolve(last?.result as T | undefined);
+			tx.onerror = () => reject(tx.error ?? new Error('IndexedDB transaction failed'));
+			tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
 		});
 	} finally {
 		db.close();
 	}
 }
 
-/** Loads the persisted file, migrating any pre-IndexedDB localStorage copy. */
+/** Persists a file under its id without touching which file is current. */
+export async function saveStoredFile(file: GridFile): Promise<void> {
+	await withStore('readwrite', (store) => store.put(file, file.id));
+}
+
+/** Persists the current file and marks it as the one to reopen.
+ * Throws on failure so callers can surface it. */
+export async function saveCurrentFile(file: GridFile): Promise<void> {
+	await withStore('readwrite', (store) => {
+		store.put(file, file.id);
+		store.put(file.id, CURRENT_ID_KEY);
+	});
+}
+
+export async function loadStoredFile(id: string): Promise<GridFile | undefined> {
+	return withStore<GridFile>('readonly', (store, collect) => collect(store.get(id)));
+}
+
+export async function deleteStoredFile(id: string): Promise<void> {
+	await withStore('readwrite', (store) => store.delete(id));
+}
+
+/** All stored files, newest-modified first. */
+export async function listStoredFiles(): Promise<StoredFileMeta[]> {
+	const db = await openDb();
+	try {
+		return await new Promise<StoredFileMeta[]>((resolve, reject) => {
+			const out: StoredFileMeta[] = [];
+			const req = db.transaction(DB_STORE, 'readonly').objectStore(DB_STORE).openCursor();
+			req.onsuccess = () => {
+				const cursor = req.result;
+				if (!cursor) {
+					resolve(out.sort((a, b) => b.modified - a.modified));
+					return;
+				}
+				const v = cursor.value as GridFile;
+				// skip the current-id pointer (a bare string) and anything odd
+				if (v && typeof v === 'object' && Array.isArray(v.sheets)) {
+					out.push({
+						id: String(cursor.key),
+						filename: v.filename || DEFAULT_FILE_NAME,
+						modified: v.modified ?? 0,
+						sheets: v.sheets.length
+					});
+				}
+				cursor.continue();
+			};
+			req.onerror = () => reject(req.error ?? new Error('IndexedDB cursor failed'));
+		});
+	} finally {
+		db.close();
+	}
+}
+
+/** Loads the file to reopen, migrating both legacy layouts: the single-slot
+ * IndexedDB record from before multi-file support, and the pre-IndexedDB
+ * localStorage copy. */
 export async function loadCurrentFile(): Promise<GridFile | undefined> {
 	try {
-		const db = await openDb();
-		try {
-			const stored = await new Promise<GridFile | undefined>((resolve, reject) => {
-				const tx = db.transaction(DB_STORE, 'readonly');
-				const req = tx.objectStore(DB_STORE).get(CURRENT_FILE_KEY);
-				req.onsuccess = () => resolve(req.result as GridFile | undefined);
-				req.onerror = () => reject(req.error ?? new Error('IndexedDB read failed'));
+		const currentId = await withStore<string>('readonly', (store, collect) =>
+			collect(store.get(CURRENT_ID_KEY))
+		);
+		if (typeof currentId === 'string') {
+			const file = await loadStoredFile(currentId);
+			if (file) return file;
+		}
+		const legacy = await withStore<GridFile>('readonly', (store, collect) =>
+			collect(store.get(LEGACY_SINGLE_KEY))
+		);
+		if (legacy) {
+			if (!legacy.id) legacy.id = crypto.randomUUID();
+			await withStore('readwrite', (store) => {
+				store.put(legacy, legacy.id);
+				store.put(legacy.id, CURRENT_ID_KEY);
+				store.delete(LEGACY_SINGLE_KEY);
 			});
-			if (stored) return stored;
-		} finally {
-			db.close();
+			return legacy;
 		}
 	} catch {
-		// fall through to the legacy copy
+		// fall through to the localStorage copy
 	}
 	try {
 		const raw = localStorage.getItem(LEGACY_LOCAL_STORAGE_KEY);
 		if (!raw) return undefined;
 		const legacy = JSON.parse(raw) as GridFile;
+		if (!legacy.id) legacy.id = crypto.randomUUID();
 		await saveCurrentFile(legacy).catch(() => {});
 		localStorage.removeItem(LEGACY_LOCAL_STORAGE_KEY);
 		return legacy;

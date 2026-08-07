@@ -107,7 +107,7 @@
 		min-height: 0;
 	}
 	.head {
-		border-bottom: 1px solid #e6ebf0;
+		border-bottom: 1px solid var(--border-light);
 	}
 	.search {
 		width: 100%;
@@ -121,7 +121,7 @@
 		display: block;
 		padding: 0 1rem 0.5rem;
 		font-size: 0.7rem;
-		color: #8c1a6a;
+		color: var(--formula);
 	}
 	.list {
 		overflow-y: auto;
@@ -130,14 +130,14 @@
 	.category {
 		position: sticky;
 		top: 0;
-		background: #f6f8fa;
+		background: var(--panel-2);
 		padding: 0.4rem 1rem;
 		font-size: 0.7rem;
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.07em;
-		color: #55606b;
-		border-bottom: 1px solid #e6ebf0;
+		color: var(--muted);
+		border-bottom: 1px solid var(--border-light);
 	}
 	.fn {
 		display: flex;
@@ -146,7 +146,7 @@
 		width: 100%;
 		background: none;
 		border: none;
-		border-bottom: 1px solid #f1f4f7;
+		border-bottom: 1px solid var(--border-light);
 		font: inherit;
 		text-align: left;
 		padding: 0.55rem 1rem;
@@ -156,7 +156,7 @@
 		cursor: pointer;
 	}
 	.fn.insertable:hover {
-		background: #fdf3fa;
+		background: var(--hover);
 	}
 	.sig {
 		display: flex;
@@ -167,14 +167,14 @@
 	.sig code {
 		font-size: 0.82rem;
 		font-weight: 600;
-		color: #8c1a6a;
+		color: var(--formula);
 	}
 	.sep {
-		color: #cfd7de;
+		color: var(--border);
 	}
 	.doc {
 		font-size: 0.8rem;
-		color: #38424c;
+		color: var(--text);
 		line-height: 1.45;
 		white-space: pre-line;
 	}
@@ -185,14 +185,14 @@
 	}
 	.examples code {
 		font-size: 0.72rem;
-		color: #55606b;
-		background: #f2f5f7;
+		color: var(--muted);
+		background: var(--panel-2);
 		padding: 0.1rem 0.35rem;
 		border-radius: 3px;
 	}
 	.empty {
 		padding: 1rem;
-		color: #55606b;
+		color: var(--muted);
 		font-size: 0.85rem;
 	}
 </style>

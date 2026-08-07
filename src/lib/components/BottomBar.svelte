@@ -87,9 +87,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		background: rgba(255, 255, 255, 0.9);
-		border-top: 1px solid #cfd7de;
-		color: #55606b;
+		background: var(--panel);
+		border-top: 1px solid var(--border);
+		color: var(--muted);
 		height: 1.5rem;
 		font-size: 0.7rem;
 		padding: 0 1rem;
@@ -106,10 +106,10 @@
 		white-space: nowrap;
 	}
 	.stat.error {
-		color: #f25f5c;
+		color: var(--error);
 	}
 	.stat.summary {
-		color: #2463eb;
+		color: var(--accent);
 		font-variant-numeric: tabular-nums;
 	}
 	button.link {

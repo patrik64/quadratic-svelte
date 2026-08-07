@@ -26,7 +26,7 @@
 		padding-top: 10vh;
 	}
 	.modal {
-		background: white;
+		background: var(--panel);
 		border-radius: 6px;
 		box-shadow:
 			0 10px 40px rgba(0, 0, 0, 0.25),

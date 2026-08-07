@@ -1,6 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const provideCompletionItems: (a: any, b: any, c: any, d: any) => [number, number, number];
+export const provideHover: (a: any, b: any, c: any) => any;
 export const __wbg_get_pos_x: (a: number) => bigint;
 export const __wbg_get_pos_y: (a: number) => bigint;
 export const __wbg_pos_free: (a: number, b: number) => void;
@@ -15,8 +17,6 @@ export const formula_docs: () => any;
 export const hello: () => void;
 export const parse_formula: (a: number, b: number, c: number, d: number) => any;
 export const relocate_formula: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
-export const provideCompletionItems: (a: any, b: any, c: any, d: any) => [number, number, number];
-export const provideHover: (a: any, b: any, c: any) => any;
 export const wasm_bindgen_8ed4c97c0d6408cb___convert__closures_____invoke___wasm_bindgen_8ed4c97c0d6408cb___JsValue__core_9b3796e30d99ddb7___result__Result_____wasm_bindgen_8ed4c97c0d6408cb___JsError___true_: (a: number, b: number, c: any) => [number, number];
 export const wasm_bindgen_8ed4c97c0d6408cb___convert__closures_____invoke___js_sys_21067679b5512d8c___Function_fn_wasm_bindgen_8ed4c97c0d6408cb___JsValue_____wasm_bindgen_8ed4c97c0d6408cb___sys__Undefined___js_sys_21067679b5512d8c___Function_fn_wasm_bindgen_8ed4c97c0d6408cb___JsValue_____wasm_bindgen_8ed4c97c0d6408cb___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
 export const __wbindgen_malloc: (a: number, b: number) => number;

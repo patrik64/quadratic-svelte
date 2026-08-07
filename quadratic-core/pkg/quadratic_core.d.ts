@@ -117,6 +117,8 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly provideCompletionItems: (a: any, b: any, c: any, d: any) => [number, number, number];
+    readonly provideHover: (a: any, b: any, c: any) => any;
     readonly __wbg_get_pos_x: (a: number) => bigint;
     readonly __wbg_get_pos_y: (a: number) => bigint;
     readonly __wbg_pos_free: (a: number, b: number) => void;
@@ -131,8 +133,6 @@ export interface InitOutput {
     readonly hello: () => void;
     readonly parse_formula: (a: number, b: number, c: number, d: number) => any;
     readonly relocate_formula: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
-    readonly provideCompletionItems: (a: any, b: any, c: any, d: any) => [number, number, number];
-    readonly provideHover: (a: any, b: any, c: any) => any;
     readonly wasm_bindgen_8ed4c97c0d6408cb___convert__closures_____invoke___wasm_bindgen_8ed4c97c0d6408cb___JsValue__core_9b3796e30d99ddb7___result__Result_____wasm_bindgen_8ed4c97c0d6408cb___JsError___true_: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen_8ed4c97c0d6408cb___convert__closures_____invoke___js_sys_21067679b5512d8c___Function_fn_wasm_bindgen_8ed4c97c0d6408cb___JsValue_____wasm_bindgen_8ed4c97c0d6408cb___sys__Undefined___js_sys_21067679b5512d8c___Function_fn_wasm_bindgen_8ed4c97c0d6408cb___JsValue_____wasm_bindgen_8ed4c97c0d6408cb___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;

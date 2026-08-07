@@ -57,17 +57,17 @@
 	}
 	.trigger:hover,
 	.trigger.active {
-		background: #f6f8fa;
+		background: var(--panel-2);
 	}
 	.panel {
 		position: absolute;
 		top: 100%;
 		left: 0;
 		margin-top: 2px;
-		background: white;
-		border: 1px solid #cfd7de;
+		background: var(--panel);
+		border: 1px solid var(--border);
 		border-radius: 4px;
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+		box-shadow: 0 4px 16px var(--shadow);
 		min-width: 220px;
 		padding: 4px 0;
 		z-index: 100;
@@ -93,18 +93,18 @@
 		text-align: left;
 		padding: 0.35rem 1rem;
 		cursor: pointer;
-		color: #202020;
+		color: var(--text);
 		white-space: nowrap;
 	}
 	.panel :global(button.menu-item:hover:not(:disabled)) {
-		background: #e7f7ff;
+		background: var(--accent-soft);
 	}
 	.panel :global(button.menu-item:disabled) {
-		color: #a7b2bc;
+		color: var(--faint-2);
 		cursor: default;
 	}
 	.panel :global(.menu-divider) {
-		border-top: 1px solid #e6ebf0;
+		border-top: 1px solid var(--border-light);
 		margin: 4px 0;
 	}
 	.panel :global(.menu-header) {
@@ -112,10 +112,10 @@
 		font-size: 0.7rem;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: #55606b;
+		color: var(--muted);
 	}
 	.panel :global(.shortcut) {
-		color: #a7b2bc;
+		color: var(--faint-2);
 		font-size: 0.75rem;
 	}
 </style>

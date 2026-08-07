@@ -4,7 +4,7 @@
 	// (or the chevron) opens the tab menu, + adds Sheet2, Sheet3, ...
 	import { app, sheetController, switchSheet } from '../state.svelte';
 
-	const SHEET_COLORS = ['#2463eb', '#8ecb89', '#ca8a04', '#cb8999', '#8c1a6a', '#3776ab', '#f25f5c'];
+	const SHEET_COLORS = ['var(--accent)', '#8ecb89', 'var(--javascript)', '#cb8999', 'var(--formula)', 'var(--python)', 'var(--error)'];
 
 	const sheets = $derived.by(() => {
 		void app.redraw;
@@ -175,23 +175,23 @@
 		display: flex;
 		align-items: stretch;
 		height: 2rem;
-		background: #fbfcfd;
-		border-top: 1px solid #cfd7de;
+		background: var(--panel-2);
+		border-top: 1px solid var(--border);
 		font-size: 0.75rem;
-		color: #55606b;
+		color: var(--muted);
 		user-select: none;
 	}
 	.add {
 		border: none;
-		border-right: 1px solid #e3e8ec;
+		border-right: 1px solid var(--border-light);
 		background: none;
 		font-size: 0.9rem;
-		color: #55606b;
+		color: var(--muted);
 		width: 2.2rem;
 		cursor: pointer;
 	}
 	.add:hover {
-		background: #eef2f5;
+		background: var(--hover);
 	}
 	.tabs {
 		display: flex;
@@ -204,7 +204,7 @@
 		align-items: center;
 		gap: 0.3rem;
 		border: none;
-		border-right: 1px solid #e3e8ec;
+		border-right: 1px solid var(--border-light);
 		background: none;
 		font: inherit;
 		color: inherit;
@@ -222,17 +222,17 @@
 		background: var(--sheet-color);
 	}
 	.tab:hover {
-		background: #eef2f5;
+		background: var(--hover);
 	}
 	.tab.active {
-		background: white;
-		color: #2463eb;
+		background: var(--panel);
+		color: var(--accent);
 		font-weight: 600;
 	}
 	.chevron {
 		visibility: hidden;
 		font-size: 0.6rem;
-		color: #8a939c;
+		color: var(--faint);
 	}
 	.tab:hover .chevron,
 	.chevron.visible {
@@ -240,7 +240,7 @@
 	}
 	.rename {
 		font: inherit;
-		border: 1px solid #2463eb;
+		border: 1px solid var(--accent);
 		outline: none;
 		margin: 3px;
 		padding: 0 0.5rem;
@@ -249,10 +249,10 @@
 	.tabmenu {
 		position: fixed;
 		bottom: 3.6rem;
-		background: white;
-		border: 1px solid #cfd7de;
+		background: var(--panel);
+		border: 1px solid var(--border);
 		border-radius: 4px;
-		box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
+		box-shadow: 0 -4px 16px var(--shadow);
 		min-width: 11rem;
 		padding: 4px 0;
 		z-index: 150;
@@ -267,13 +267,13 @@
 		text-align: left;
 		padding: 0.35rem 1rem;
 		cursor: pointer;
-		color: #202020;
+		color: var(--text);
 	}
 	.menu-item:hover:not(:disabled) {
-		background: #eef4ff;
+		background: var(--accent-soft);
 	}
 	.menu-item:disabled {
-		color: #a7b2bc;
+		color: var(--faint-2);
 		cursor: default;
 	}
 	.menu-label {
@@ -281,10 +281,10 @@
 		font-size: 0.65rem;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: #8a939c;
+		color: var(--faint);
 	}
 	.menu-divider {
-		border-top: 1px solid #e6ebf0;
+		border-top: 1px solid var(--border-light);
 		margin: 4px 0;
 	}
 	.swatches {
@@ -295,14 +295,14 @@
 	.swatch {
 		width: 18px;
 		height: 18px;
-		border: 1px solid #cfd7de;
+		border: 1px solid var(--border);
 		border-radius: 3px;
 		cursor: pointer;
 		padding: 0;
 		font-size: 0.6rem;
-		color: #55606b;
+		color: var(--muted);
 	}
 	.swatch.clear {
-		background: white;
+		background: var(--panel);
 	}
 </style>

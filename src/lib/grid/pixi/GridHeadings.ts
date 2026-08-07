@@ -21,6 +21,12 @@ const LABEL_STYLE = new TextStyle({
 	fill: colors.darkGray
 });
 
+/** Re-reads theme colors into the shared label style (TextStyle changes
+ * propagate to every pooled Text instance). */
+export function refreshHeadingLabelStyle(): void {
+	LABEL_STYLE.fill = colors.darkGray;
+}
+
 export class GridHeadings {
 	container = new Container();
 	rowHeadingWidth = HEADING_SIZE;

@@ -4,7 +4,7 @@ version = "0.1.7"
 authors = ["Andrew Farkas <andrew.farkas@quadratic.to>"]
 edition = "2021"
 description = "Infinite data grid with Python, JavaScript, and SQL built-in"
-repository = "https://github.com/quadratichq/quadratic"
+repository = "https://github.com/patrik64/quadratic-svelte"
 license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

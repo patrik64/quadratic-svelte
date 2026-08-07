@@ -1,3 +1,4 @@
+import { getCellA1Notation } from './a1';
 import type { SheetController } from './SheetController';
 import { coordKey, isCodeCellType, type ArrayOutput, type Cell } from './types';
 
@@ -36,6 +37,23 @@ export async function updateCellAndDCells(options: UpdateCellsOptions): Promise<
 	);
 
 	for (const cell of starting_cells) {
+		// a write or delete landing on a spilled COMPUTED cell must re-run its
+		// owner so the owner can re-spill (after a delete) or turn into a
+		// #SPILL! error (after a write) — the dependency graph cannot express
+		// this without the owner depending on its own output
+		const landedOn = sheet.getCell(cell.x, cell.y);
+		if (landedOn?.type === 'COMPUTED') {
+			const owner = sheet
+				.getAllCells()
+				.find(
+					(c) =>
+						isCodeCellType(c.type) &&
+						!(c.x === cell.x && c.y === cell.y) &&
+						c.array_cells?.some(([ax, ay]) => ax === cell.x && ay === cell.y)
+				);
+			if (owner) queue.push({ sheetIndex: startSheetIndex, x: owner.x, y: owner.y });
+		}
+
 		if (delete_starting_cells) {
 			const existing = sheet.getCell(cell.x, cell.y);
 			if (existing) {
@@ -147,8 +165,11 @@ async function computeCell(
 	const oldArrayCells = (cell.array_cells ?? []).filter(
 		([x, y]) => !(x === cell.x && y === cell.y)
 	);
-	const newArrayCells: [number, number][] = [];
+	const oldKeys = new Set(oldArrayCells.map(([x, y]) => coordKey(x, y)));
+	let newArrayCells: [number, number][] = [];
 	let originValue = displayValue;
+	const spillBlockers: [number, number][] = [];
+	let outputSize = '';
 
 	if (success && arrayOutput && arrayOutput.length > 0) {
 		const rows2d: (string | number | boolean | null | undefined)[][] = Array.isArray(
@@ -156,7 +177,11 @@ async function computeCell(
 		)
 			? (arrayOutput as (string | number | boolean)[][])
 			: (arrayOutput as (string | number | boolean)[]).map((v) => [v]);
+		outputSize = `${Math.max(...rows2d.map((r) => r.length))}×${rows2d.length}`;
 
+		// dry-run first: collect the writes, then scan for blockers — a cell
+		// the previous spill didn't own must never be silently overwritten
+		const writes: { x: number; y: number; value: string }[] = [];
 		let first = true;
 		for (let dy = 0; dy < rows2d.length; dy++) {
 			const row = rows2d[dy];
@@ -172,25 +197,40 @@ async function computeCell(
 					continue;
 				}
 				newArrayCells.push([x, y]);
+				writes.push({ x, y, value: String(v) });
+			}
+		}
+
+		for (const w of writes) {
+			const existing = sheet.getCell(w.x, w.y);
+			if (existing && !(existing.type === 'COMPUTED' && oldKeys.has(coordKey(w.x, w.y)))) {
+				spillBlockers.push([w.x, w.y]);
+			}
+		}
+
+		if (spillBlockers.length === 0) {
+			for (const w of writes) {
 				sc.execute({
 					type: 'setCell',
-					x,
-					y,
+					x: w.x,
+					y: w.y,
 					cell: {
-						x,
-						y,
+						x: w.x,
+						y: w.y,
 						type: 'COMPUTED',
-						value: String(v),
+						value: w.value,
 						last_modified: new Date().toISOString()
 					},
 					sheetIndex
 				});
-				queue.push({ sheetIndex, x, y });
+				queue.push({ sheetIndex, x: w.x, y: w.y });
 			}
+		} else {
+			newArrayCells = [];
 		}
 	}
 
-	// delete stale spilled cells no longer produced
+	// delete stale spilled cells no longer produced (all of them when blocked)
 	const newKeys = new Set(newArrayCells.map(([x, y]) => coordKey(x, y)));
 	for (const [x, y] of oldArrayCells) {
 		if (!newKeys.has(coordKey(x, y))) {
@@ -202,16 +242,28 @@ async function computeCell(
 		}
 	}
 
+	const blocked = spillBlockers.length > 0;
+	// blocker coords ride along in cells_accessed so the dependency edges
+	// survive rebuildDependencies (undo/redo/file load) and shiftAxis —
+	// clearing a blocker then re-runs this cell through normal propagation
+	const accessedWithBlockers = blocked ? [...cellsAccessed, ...spillBlockers] : cellsAccessed;
+	const spillMessage = blocked
+		? `Spill error: ${outputSize} output would overwrite ${spillBlockers
+				.slice(0, 3)
+				.map(([x, y]) => getCellA1Notation(x, y))
+				.join(', ')}${spillBlockers.length > 3 ? '…' : ''}`
+		: undefined;
+
 	const updated: Cell = {
 		...cell,
-		value: success ? originValue : '',
+		value: blocked ? '#SPILL!' : success ? originValue : '',
 		array_cells: newArrayCells.length > 0 ? newArrayCells : undefined,
 		evaluation_result: {
-			success,
+			success: success && !blocked,
 			std_out: stdOut,
-			std_err: stdErr,
-			output_value: success ? originValue : null,
-			cells_accessed: cellsAccessed,
+			std_err: blocked ? spillMessage : stdErr,
+			output_value: success && !blocked ? originValue : null,
+			cells_accessed: accessedWithBlockers,
 			array_output: arrayOutput,
 			error_span: errorSpan
 		},
@@ -221,7 +273,7 @@ async function computeCell(
 
 	sheet.setDependencies(
 		{ x: cell.x, y: cell.y },
-		cellsAccessed.map(([x, y]) => ({ x, y }))
+		accessedWithBlockers.map(([x, y]) => ({ x, y }))
 	);
 }
 

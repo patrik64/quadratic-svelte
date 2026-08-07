@@ -111,13 +111,13 @@
 		display: flex;
 		align-items: center;
 		gap: 0.35rem;
-		background: white;
-		border: 1px solid #cfd7de;
+		background: var(--panel);
+		border: 1px solid var(--border);
 		border-radius: 6px;
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+		box-shadow: 0 4px 16px var(--shadow);
 		padding: 0.3rem 0.4rem;
 		font-size: 0.8rem;
-		color: #55606b;
+		color: var(--muted);
 	}
 	input {
 		border: none;
@@ -130,41 +130,41 @@
 		min-width: 3.6rem;
 		text-align: right;
 		font-variant-numeric: tabular-nums;
-		color: #8a939c;
+		color: var(--faint);
 		font-size: 0.72rem;
 	}
 	.count.none {
-		color: #f25f5c;
+		color: var(--error);
 	}
 	.nav {
 		background: none;
 		border: none;
 		font: inherit;
-		color: #55606b;
+		color: var(--muted);
 		cursor: pointer;
 		padding: 0.15rem 0.35rem;
 		border-radius: 4px;
 	}
 	.nav:hover {
-		background: #eef2f5;
+		background: var(--hover);
 	}
 	.all {
 		background: none;
-		border: 1px solid #cfd7de;
+		border: 1px solid var(--border);
 		border-radius: 9px;
 		font: inherit;
 		font-size: 0.68rem;
-		color: #8a939c;
+		color: var(--faint);
 		cursor: pointer;
 		padding: 0.1rem 0.5rem;
 		white-space: nowrap;
 	}
 	.all.on {
-		color: #2463eb;
-		border-color: #2463eb;
-		background: #eef4ff;
+		color: var(--accent);
+		border-color: var(--accent);
+		background: var(--accent-soft);
 	}
 	.close {
-		color: #8a939c;
+		color: var(--faint);
 	}
 </style>

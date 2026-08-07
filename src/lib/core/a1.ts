@@ -32,14 +32,17 @@ export function getCellA1Notation(x: number, y: number): string {
 	return `${getColumnA1Notation(x)}${getRowA1Notation(y)}`;
 }
 
-/** Regex for one cell reference, e.g. B7, nB7, BnA7, An1 */
-export const CELL_REF_RE = /^(n?)([A-Z]+)(n?)(\d+)$/;
+/** Regex for one cell reference, e.g. B7, nB7, An1, nBn2.
+ * The negative marker is a literal lowercase `n`, so the ref must keep its
+ * case here — uppercasing first would fold the marker into the column
+ * letters (`nA7` → column "NA"). Lazy letters let the row's `n` match. */
+export const CELL_REF_RE = /^(n?)([A-Za-z]+?)(n?)(\d+)$/;
 
 export function parseCellRef(ref: string): { x: number; y: number } | undefined {
-	const m = CELL_REF_RE.exec(ref.toUpperCase());
+	const m = CELL_REF_RE.exec(ref);
 	if (!m) return undefined;
 	const [, colNeg, letters, rowNeg, digits] = m;
-	const col = lettersToNumber(letters);
+	const col = lettersToNumber(letters.toUpperCase());
 	const x = colNeg ? -col - 1 : col;
 	const row = parseInt(digits, 10);
 	const y = rowNeg ? -row : row;
