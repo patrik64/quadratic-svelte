@@ -3,6 +3,7 @@
 	import { getCellA1Notation } from '../core/a1';
 	import { HEADING_SIZE, isCodeCellType, type Cell } from '../core/types';
 	import { editorModeColor } from '../grid/colors';
+	import { tokenizeCode, type CodeToken } from '../helpers/codeHighlight';
 	import { PixiGrid, type GridUIState } from '../grid/pixi/PixiGrid';
 	import { handleKeyDown } from '../grid/keyboard';
 	import {
@@ -43,7 +44,12 @@
 		hoverCard = undefined;
 	}
 
-	function hoverInfo(cell: Cell): { label: string; color: string; body: string } {
+	function hoverInfo(cell: Cell): {
+		label: string;
+		color: string;
+		body: string;
+		tokens?: CodeToken[];
+	} {
 		const err = cell.evaluation_result?.success === false;
 		const label =
 			cell.type === 'PYTHON'
@@ -54,14 +60,18 @@
 						? 'Formula'
 						: 'Cell';
 		const code = cell.formula_code ?? cell.python_code ?? cell.javascript_code ?? '';
-		const body = err ? (cell.evaluation_result?.std_err ?? 'Error') : code;
+		const body = (err ? (cell.evaluation_result?.std_err ?? 'Error') : code)
+			.split('\n')
+			.slice(0, 4)
+			.join('\n');
 		return {
 			label: err ? `${label} · error` : label,
 			color:
 				err || !isCodeCellType(cell.type)
 					? 'var(--error)'
 					: editorModeColor(cell.type),
-			body: body.split('\n').slice(0, 4).join('\n')
+			body,
+			tokens: !err && isCodeCellType(cell.type) ? tokenizeCode(cell.type, body) : undefined
 		};
 	}
 
@@ -604,7 +614,7 @@
 				: hoverCard.sy + 18}px"
 		>
 			<div class="hc-head" style:color={info.color}>{info.label}</div>
-			<pre class="hc-body">{info.body}</pre>
+			<pre class="hc-body">{#if info.tokens}{#each info.tokens as t}{#if t.type === 'plain'}{t.text}{:else}<span class="syn-{t.type}">{t.text}</span>{/if}{/each}{:else}{info.body}{/if}</pre>
 		</div>
 	{/if}
 </div>

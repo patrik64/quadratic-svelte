@@ -77,8 +77,7 @@
 		{:else if $pythonStatus.state === 'error'}
 			<span class="stat error">✗ Python failed to load</span>
 		{/if}
-		<span class="stat">✓ Quadratic Svelte 0.1.0</span>
-		<span class="beta">BETA</span>
+		<span class="stat">quadratic is svelte</span>
 	</div>
 </div>
 

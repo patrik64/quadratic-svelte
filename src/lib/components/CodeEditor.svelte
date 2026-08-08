@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { getCellA1Notation } from '../core/a1';
 	import { editorModeColor } from '../grid/colors';
+	import { tokenizeCode } from '../helpers/codeHighlight';
 	import { KeyboardSymbols } from '../helpers/keyboardSymbols';
 	import { pythonStatus } from '../python/pythonRunner';
 	import type { FormulaCompletion } from '../formulas/runFormula';
@@ -9,6 +10,24 @@
 	let code = $state('');
 	let running = $state(false);
 	let textareaEl: HTMLTextAreaElement | undefined = $state();
+
+	// syntax highlighting: a <pre> of colored tokens sits behind the textarea,
+	// whose own text is transparent (same layering trick as the caret mirror)
+	let highlightEl: HTMLPreElement | undefined = $state();
+	const hlTokens = $derived(tokenizeCode(app.editorMode, code));
+
+	function syncHighlightScroll(): void {
+		if (highlightEl && textareaEl) {
+			highlightEl.scrollTop = textareaEl.scrollTop;
+			highlightEl.scrollLeft = textareaEl.scrollLeft;
+		}
+	}
+
+	// re-sync after content changes that produce no scroll event (cell switch)
+	$effect(() => {
+		void hlTokens;
+		syncHighlightScroll();
+	});
 
 	// ---------- formula autocomplete (fed by the core's LSP module) ----------
 
@@ -304,6 +323,7 @@
 	{/if}
 
 	<div class="editor-area">
+		<pre class="highlight" aria-hidden="true" bind:this={highlightEl}>{#each hlTokens as t}{#if t.type === 'plain'}{t.text}{:else}<span class="syn-{t.type}">{t.text}</span>{/if}{/each}{'\n'}</pre>
 		<textarea
 			bind:this={textareaEl}
 			bind:value={code}
@@ -320,7 +340,10 @@
 				if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key))
 					updateCaret();
 			}}
-			onscroll={refreshAcPos}
+			onscroll={() => {
+				syncHighlightScroll();
+				refreshAcPos();
+			}}
 			onblur={() => (acDismissed = true)}
 			placeholder={app.editorMode === 'FORMULA'
 				? 'e.g.  SUM(A0:A5) * 2'
@@ -464,17 +487,38 @@
 		display: flex;
 		min-height: 8rem;
 	}
+	/* the textarea and the highlight layer must share identical text metrics
+	 * so their glyphs overlap exactly */
+	.code,
+	.highlight {
+		padding: 0.75rem;
+		font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+		font-size: 0.8rem;
+		line-height: 1.5;
+		tab-size: 4;
+		white-space: pre-wrap;
+		overflow-wrap: break-word;
+	}
 	.code {
 		flex: 1;
 		width: 100%;
 		border: none;
 		outline: none;
 		resize: none;
-		padding: 0.75rem;
-		font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
-		font-size: 0.8rem;
-		line-height: 1.5;
-		tab-size: 4;
+		position: relative; /* paints above the absolutely-positioned highlight */
+		color: transparent; /* the highlight layer renders the glyphs */
+		background: transparent;
+	}
+	.code::placeholder {
+		color: var(--faint);
+	}
+	.highlight {
+		position: absolute;
+		inset: 0;
+		margin: 0;
+		overflow: hidden;
+		pointer-events: none;
+		color: var(--text);
 	}
 	.ac {
 		position: absolute;

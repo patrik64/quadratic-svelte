@@ -3,11 +3,11 @@
 
 # Quadratic Svelte
 
-A SvelteKit reimplementation of [Quadratic](https://github.com/apryse/quadratic) — the data-science spreadsheet with an infinite grid, formulas, JavaScript and Python cells.
+a SvelteKit reimplementation of [Quadratic](https://github.com/apryse/quadratic) — the data-science spreadsheet with an infinite grid, formulas, JavaScript and Python cells.
 
 ## Try
 
-Live at [quadratic-svelte.vercel.app](https://quadratic-svelte.vercel.app)
+live at [quadratic-svelte.vercel.app](https://quadratic-svelte.vercel.app)
 
 ## Run
 
@@ -16,4 +16,4 @@ pnpm i
 pnpm run dev
 ```
 
-for keyboard shortcuts and details about the port look into ``/docs`` folder.
+keyboard shortcuts and details about the port can be found in ``/docs`` folder.
