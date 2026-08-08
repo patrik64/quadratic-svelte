@@ -12,12 +12,15 @@ export interface PythonRunResult {
 	cells_accessed: [number, number][];
 	std_out?: string;
 	std_err?: string;
+	image_output?: string;
 }
 
 export interface PythonStatus {
 	state: 'idle' | 'loading' | 'ready' | 'error';
 	version?: string;
 	error?: string;
+	/** Transient progress note, e.g. while micropip fetches a package. */
+	detail?: string;
 }
 
 export const pythonStatus = writable<PythonStatus>({ state: 'idle' });
@@ -44,7 +47,17 @@ function coerce(raw: string | undefined): string | number | boolean | null {
 
 const PRELUDE = `
 import re as _re
+import sys as _sys
+import os as _os
 import GetCellsDB
+
+# pyodide's matplotlib defaults to a canvas backend that draws into the page;
+# force the file backend so figures can be captured as PNGs instead
+_os.environ.setdefault('MPLBACKEND', 'AGG')
+
+# charts produced by a run: plotly figures as JSON, matplotlib as data URLs
+_quadratic_figures = []
+_quadratic_images = []
 
 async def getCell(x, y):
     return GetCellsDB.getCellValue(x, y)
@@ -78,6 +91,75 @@ class _Cells:
 
 cells = _Cells()
 
+def _quadratic_missing_imports(code):
+    """Top-level imports that aren't available — candidates for micropip."""
+    import ast, importlib.util, json
+    names = set()
+    try:
+        tree = ast.parse(code)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    names.add(alias.name.split('.')[0])
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                names.add(node.module.split('.')[0])
+    except SyntaxError:
+        # top-level await (and other snippets ast rejects) still scan textually
+        for m in _re.finditer(r'^\\s*(?:from|import)\\s+([A-Za-z_][\\w.]*)', code, _re.M):
+            names.add(m.group(1).split('.')[0])
+
+    missing = []
+    for name in sorted(names):
+        if name in _sys.modules:
+            continue
+        try:
+            if importlib.util.find_spec(name) is None:
+                missing.append(name)
+        except (ImportError, ModuleNotFoundError, ValueError):
+            missing.append(name)
+    return json.dumps(missing)
+
+
+def _quadratic_patch_plotly():
+    """fig.show() has no renderer under pyodide and silently does nothing;
+    capture the figure so it can be drawn on the sheet instead."""
+    try:
+        import plotly.basedatatypes as _bdt
+        import plotly.io as _pio
+    except Exception:
+        return
+    if getattr(_bdt.BaseFigure, '_quadratic_patched', False):
+        return
+
+    def _show(self, *args, **kwargs):
+        _quadratic_figures.append(self.to_json())
+
+    _bdt.BaseFigure.show = _show
+    _bdt.BaseFigure._quadratic_patched = True
+    _pio.show = lambda fig, *a, **k: _quadratic_figures.append(
+        fig.to_json() if hasattr(fig, 'to_json') else _pio.to_json(fig)
+    )
+
+
+def _quadratic_is_figure(value):
+    return type(value).__module__.split('.')[0] == 'plotly' and hasattr(value, 'to_json')
+
+
+def _quadratic_collect_matplotlib():
+    """Any figures left open by the run become PNGs."""
+    if 'matplotlib.pyplot' not in _sys.modules:
+        return
+    import base64, io
+    plt = _sys.modules['matplotlib.pyplot']
+    for num in plt.get_fignums():
+        buf = io.BytesIO()
+        plt.figure(num).savefig(buf, format='png', bbox_inches='tight')
+        _quadratic_images.append(
+            'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()
+        )
+    plt.close('all')
+
+
 def _sanitize(v):
     import math
     if v is None:
@@ -98,6 +180,13 @@ async def _quadratic_run(code):
     # allow synchronous-looking use of the async-free API (kept for parity)
     code = _re.sub(r'\\bawait await\\b', 'await', code)
 
+    _quadratic_figures.clear()
+    _quadratic_images.clear()
+    # plotly must be patched before the code runs, since fig.show() happens
+    # during evaluation; importing it here is free once micropip installed it
+    if 'plotly' in code:
+        _quadratic_patch_plotly()
+
     out = io.StringIO()
     try:
         with redirect_stdout(out):
@@ -115,6 +204,15 @@ async def _quadratic_run(code):
             'std_out': out.getvalue(),
             'std_err': traceback.format_exc(),
         })
+
+    # a figure as the cell's last expression counts as displaying it
+    if _quadratic_is_figure(value):
+        _quadratic_figures.append(value.to_json())
+        value = None
+    try:
+        _quadratic_collect_matplotlib()
+    except Exception:
+        pass
 
     array_output = None
     output_value = None
@@ -155,6 +253,8 @@ async def _quadratic_run(code):
         'array_output': array_output,
         'std_out': out.getvalue(),
         'std_err': None,
+        'figures': list(_quadratic_figures),
+        'images': list(_quadratic_images),
     })
 `;
 
@@ -197,6 +297,24 @@ async function loadPython(): Promise<Pyodide> {
 	return loadPromise;
 }
 
+/** Installs imports that aren't in the pyodide distribution (plotly, …) from
+ * PyPI. A failure is left alone: the import itself then raises the usual
+ * ModuleNotFoundError, which is a clearer message than anything thrown here. */
+async function installMissingPackages(py: Pyodide, code: string): Promise<void> {
+	const missing: string[] = JSON.parse(py.globals.get('_quadratic_missing_imports')(code));
+	if (missing.length === 0) return;
+	const micropip = py.pyimport('micropip');
+	for (const name of missing) {
+		pythonStatus.update((s) => ({ ...s, detail: `Installing ${name}…` }));
+		try {
+			await micropip.install(name);
+		} catch {
+			// import-time error reports it
+		}
+	}
+	pythonStatus.update((s) => ({ ...s, detail: undefined }));
+}
+
 /** Insert `await` before the cell-API calls so users can write them synchronously. */
 function attemptFixAwait(code: string): string {
 	let fixed = code.replace(/(?<!await\s)\b(cells?|c|getCells?|getCell)(\s*[([])/g, 'await $1$2');
@@ -213,16 +331,33 @@ export async function runPython(
 		currentGetCellValue = getCellValue;
 		currentAccessed = [];
 		await py.loadPackagesFromImports(code);
+		await installMissingPackages(py, code);
 		const runner = py.globals.get('_quadratic_run');
 		const resultJson: string = await runner(attemptFixAwait(code));
 		const parsed = JSON.parse(resultJson);
+
+		// matplotlib arrives as a PNG already; plotly figures rasterize here
+		const logs: string[] = parsed.std_out ? [parsed.std_out] : [];
+		let imageOutput: string | undefined = parsed.images?.[0];
+		if (!imageOutput && parsed.figures?.length) {
+			try {
+				const { figureToPng } = await import('./plotlyImage');
+				imageOutput = await figureToPng(parsed.figures[0]);
+			} catch (e) {
+				logs.push(`WARNING: could not render chart: ${(e as Error)?.message ?? String(e)}`);
+			}
+		}
+		const extra = (parsed.figures?.length ?? 0) + (parsed.images?.length ?? 0);
+		if (extra > 1) logs.push(`WARNING: showing the first of ${extra} charts`);
+
 		return {
 			success: parsed.success,
 			output_value: parsed.output_value,
 			array_output: parsed.array_output,
 			cells_accessed: currentAccessed,
-			std_out: parsed.std_out || undefined,
-			std_err: parsed.std_err || undefined
+			std_out: logs.length ? logs.join('\n') : undefined,
+			std_err: parsed.std_err || undefined,
+			image_output: imageOutput
 		};
 	} catch (e) {
 		return {

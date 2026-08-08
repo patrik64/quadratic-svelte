@@ -161,6 +161,7 @@ async function computeCell(
 		cellsAccessed = result.cells_accessed;
 		stdOut = result.std_out;
 		stdErr = result.std_err;
+		imageOutput = result.image_output;
 	}
 
 	// -------- spill array output --------

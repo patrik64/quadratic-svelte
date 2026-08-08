@@ -318,8 +318,11 @@
 		</div>
 	</div>
 
-	{#if app.editorMode === 'PYTHON' && $pythonStatus.state === 'loading'}
-		<div class="python-loading">Loading Python runtime (Pyodide + pandas)… first run may take a moment.</div>
+	{#if app.editorMode === 'PYTHON' && ($pythonStatus.state === 'loading' || $pythonStatus.detail)}
+		<div class="python-loading">
+			{$pythonStatus.detail ??
+				'Loading Python runtime (Pyodide + pandas)… first run may take a moment.'}
+		</div>
 	{/if}
 
 	<div class="editor-area">
