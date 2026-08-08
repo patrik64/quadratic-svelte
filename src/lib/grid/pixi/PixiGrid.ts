@@ -2,7 +2,7 @@
 // Display objects persist between frames; pan/zoom is a pure viewport
 // transform, and layers redraw only when their dirty flag is set.
 
-import { Application, Container, Graphics, Rectangle, Text } from 'pixi.js';
+import { Application, Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js';
 import { Viewport } from 'pixi-viewport';
 import { formatCellValue } from '../../core/cellTextFormatter';
 import type { Sheet } from '../../core/Sheet';
@@ -75,8 +75,11 @@ export class PixiGrid {
 	private borders = new Graphics();
 	private outlines = new Graphics();
 	private labelLayer = new Container();
+	private imageLayer = new Container();
 	private selectionGfx = new Graphics();
 	private labelCache = new Map<string, CachedLabel>();
+	// canvas outputs (charts), keyed by a cheap signature of the data URL
+	private imageTextures = new Map<string, Texture | 'loading'>();
 	private destroyed = false;
 
 	constructor(
@@ -120,6 +123,7 @@ export class PixiGrid {
 			this.borders, // above gridlines so cell borders paint over them
 			this.outlines,
 			this.labelLayer,
+			this.imageLayer, // charts cover cell text beneath them
 			this.selectionGfx
 		);
 		this.app.stage.addChild(this.viewport);
@@ -488,6 +492,53 @@ export class PixiGrid {
 				cached.text.destroy();
 				this.labelLayer.removeChild(cached.text);
 				this.labelCache.delete(key);
+			}
+		}
+
+		this.drawImages(range);
+	}
+
+	/** Canvas outputs (charts) anchored at their cell's top-left, drawn at the
+	 * image's natural pixel size. The wide top/left margins keep an image
+	 * visible while its origin cell is scrolled off-screen. */
+	private drawImages(range: ReturnType<PixiGrid['visibleRange']>): void {
+		this.imageLayer.removeChildren();
+		const offsets = this.getSheet().gridOffsets;
+		const cells = this.getSheet().getCellsInRect({
+			left: range.colStart - 40,
+			top: range.rowStart - 60,
+			right: range.colEnd,
+			bottom: range.rowEnd
+		});
+		const used = new Set<string>();
+		for (const cell of cells) {
+			const url = cell.evaluation_result?.image_output;
+			if (!url) continue;
+			const key = `${url.length}:${url.slice(-40)}`;
+			used.add(key);
+			const tex = this.imageTextures.get(key);
+			if (tex === undefined) {
+				this.imageTextures.set(key, 'loading');
+				const img = new Image();
+				img.onload = () => {
+					if (this.destroyed) return;
+					this.imageTextures.set(key, Texture.from(img));
+					this.dirtyCells = true;
+				};
+				img.src = url;
+				continue;
+			}
+			if (tex === 'loading') continue;
+			const r = offsets.getCellRect(cell.x, cell.y);
+			const sprite = new Sprite(tex);
+			sprite.position.set(r.x, r.y);
+			this.imageLayer.addChild(sprite);
+		}
+		// evict textures for images that left the view or were re-run
+		for (const [key, tex] of this.imageTextures) {
+			if (!used.has(key) && tex !== 'loading') {
+				tex.destroy(true);
+				this.imageTextures.delete(key);
 			}
 		}
 	}

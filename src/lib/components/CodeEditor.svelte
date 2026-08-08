@@ -382,6 +382,9 @@
 		<div class="output-header">OUTPUT</div>
 		{#if result}
 			{#if result.success}
+				{#if result.image_output}
+					<img class="output-image" src={result.image_output} alt="Canvas output" />
+				{/if}
 				{#if result.output_value !== null && result.output_value !== undefined}
 					<div class="output-value">{result.output_value}</div>
 				{/if}
@@ -594,6 +597,13 @@
 	.output-value {
 		font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
 		font-size: 0.8rem;
+	}
+	.output-image {
+		max-width: 100%;
+		height: auto;
+		border: 1px solid var(--border-light);
+		border-radius: 3px;
+		margin-bottom: 0.3rem;
 	}
 	.output-note {
 		color: var(--muted);

@@ -2,6 +2,8 @@
 // the return value of the user's (async) code becomes the cell output,
 // arrays spill (1-D down a column, 2-D as rows, arrays of plain objects get
 // a header row), console output is captured, q.cells()/q.pos() API.
+// Static `import` declarations are rewritten to dynamic imports so CDN ESM
+// modules work, and a returned canvas becomes a PNG image on the sheet.
 
 import { getCellA1Notation, parseCellRef } from '../core/a1';
 import type { ArrayOutput } from '../core/types';
@@ -13,6 +15,89 @@ export interface JavascriptRunResult {
 	cells_accessed: [number, number][];
 	std_out?: string;
 	std_err?: string;
+	image_output?: string;
+}
+
+/** Rewrites top-level static `import` declarations to `await import()` so
+ * user code can load ESM dependencies from CDNs — the cell body is compiled
+ * with `new AsyncFunction(...)`, where static imports are a syntax error.
+ * Line-based: an import statement spread over several lines is not
+ * recognized. Replacements keep the line count so error positions map back. */
+export function transformImports(code: string): string {
+	const rewrite = (line: string): string => {
+		const bare = /^(\s*)import\s+(['"][^'"]+['"])\s*;?\s*$/.exec(line);
+		if (bare) return `${bare[1]}await import(${bare[2]});`;
+		const m = /^(\s*)import\s+([^'"]+?)\s+from\s+(['"][^'"]+['"])\s*;?\s*$/.exec(line);
+		if (!m) return line;
+		const [, indent, clause, spec] = m;
+		let def: string | undefined;
+		let rest = clause.trim();
+		if (!'{*'.includes(rest[0])) {
+			const dm = /^([A-Za-z_$][\w$]*)\s*(,\s*)?/.exec(rest);
+			if (!dm) return line;
+			def = dm[1];
+			rest = rest.slice(dm[0].length).trim();
+			if (rest !== '' && !dm[2]) return line;
+		}
+		if (rest.startsWith('{') && rest.endsWith('}')) {
+			const inner = rest.slice(1, -1).replace(/\s+as\s+/g, ': ').trim();
+			const parts = def ? `default: ${def}, ${inner}` : inner;
+			return `${indent}const { ${parts} } = await import(${spec});`;
+		}
+		if (rest.startsWith('*')) {
+			const ns = /^\*\s*as\s+([A-Za-z_$][\w$]*)$/.exec(rest);
+			if (!ns) return line;
+			return def
+				? `${indent}const ${ns[1]} = await import(${spec}), ${def} = ${ns[1]}.default;`
+				: `${indent}const ${ns[1]} = await import(${spec});`;
+		}
+		if (rest === '' && def) return `${indent}const { default: ${def} } = await import(${spec});`;
+		return line;
+	};
+	return code.split('\n').map(rewrite).join('\n');
+}
+
+function isCanvas(v: unknown): v is OffscreenCanvas | HTMLCanvasElement {
+	return (
+		(typeof OffscreenCanvas !== 'undefined' && v instanceof OffscreenCanvas) ||
+		(typeof HTMLCanvasElement !== 'undefined' && v instanceof HTMLCanvasElement)
+	);
+}
+
+/** Converts a returned canvas to a PNG data URL. Chart libraries draw over
+ * several animation frames, so capture waits until the pixels stop changing
+ * (bounded by a cap) rather than grabbing a half-animated first frame. */
+async function captureCanvas(canvas: OffscreenCanvas | HTMLCanvasElement): Promise<string> {
+	const ctx = canvas.getContext('2d') as
+		| OffscreenCanvasRenderingContext2D
+		| CanvasRenderingContext2D
+		| null;
+	if (ctx && canvas.width > 0 && canvas.height > 0) {
+		const sample = (): number => {
+			const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+			let h = 0;
+			for (let i = 0; i < data.length; i += 1021) h = (h * 31 + data[i]) | 0;
+			return h;
+		};
+		const started = performance.now();
+		let prev = sample();
+		while (performance.now() - started < 1600) {
+			await new Promise((r) => setTimeout(r, 120));
+			const cur = sample();
+			if (cur === prev) break;
+			prev = cur;
+		}
+	}
+	if (typeof OffscreenCanvas !== 'undefined' && canvas instanceof OffscreenCanvas) {
+		const blob = await canvas.convertToBlob({ type: 'image/png' });
+		return await new Promise<string>((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onload = () => resolve(reader.result as string);
+			reader.onerror = () => reject(reader.error ?? new Error('could not read canvas blob'));
+			reader.readAsDataURL(blob);
+		});
+	}
+	return (canvas as HTMLCanvasElement).toDataURL('image/png');
 }
 
 type Scalar = string | number | boolean;
@@ -95,7 +180,7 @@ export async function runJavascript(
 		const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (
 			...args: string[]
 		) => (...fnArgs: unknown[]) => Promise<unknown>;
-		const fn = new AsyncFunction('q', 'cell', 'cells', 'pos', 'console', code);
+		const fn = new AsyncFunction('q', 'cell', 'cells', 'pos', 'console', transformImports(code));
 		result = await fn(q, cell, cells, q.pos, capturedConsole);
 	} catch (e) {
 		const err = e as Error;
@@ -110,6 +195,23 @@ export async function runJavascript(
 			std_out: logs.length ? logs.join('\n') : undefined,
 			std_err: message
 		};
+	}
+
+	// a returned canvas becomes an image on the sheet instead of a cell value
+	if (isCanvas(result)) {
+		try {
+			const image = await captureCanvas(result);
+			return {
+				success: true,
+				output_value: null,
+				image_output: image,
+				cells_accessed: accessed,
+				std_out: logs.length ? logs.join('\n') : undefined
+			};
+		} catch (e) {
+			logs.push(`WARNING: could not capture canvas: ${(e as Error)?.message ?? e}`);
+			result = undefined;
+		}
 	}
 
 	const { output_value, array_output, warning } = convertOutput(result);

@@ -16,6 +16,8 @@ export interface CellEvaluationResult {
 	output_value: string | null;
 	cells_accessed: [number, number][];
 	array_output?: ArrayOutput;
+	/** PNG data URL of a returned canvas, drawn over the grid at the cell. */
+	image_output?: string;
 	error_span: [number, number] | null;
 }
 

@@ -118,6 +118,7 @@ async function computeCell(
 	let stdOut: string | undefined;
 	let stdErr: string | undefined;
 	let errorSpan: [number, number] | null = null;
+	let imageOutput: string | undefined;
 
 	if (cell.type === 'FORMULA') {
 		// Rust/WASM quadratic-core engine, lazy-loaded on first evaluation.
@@ -149,6 +150,7 @@ async function computeCell(
 		cellsAccessed = result.cells_accessed;
 		stdOut = result.std_out;
 		stdErr = result.std_err;
+		imageOutput = result.image_output;
 	} else {
 		// PYTHON — lazy import keeps pyodide machinery out of the base flow
 		const { runPython } = await import('../python/pythonRunner');
@@ -265,6 +267,7 @@ async function computeCell(
 			output_value: success && !blocked ? originValue : null,
 			cells_accessed: accessedWithBlockers,
 			array_output: arrayOutput,
+			image_output: imageOutput,
 			error_span: errorSpan
 		},
 		last_modified: new Date().toISOString()
