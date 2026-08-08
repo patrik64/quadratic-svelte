@@ -1,0 +1,9 @@
+node_modules
+build
+.svelte-kit
+.vercel
+docs
+quadratic-core/target
+pnpm-lock.yaml
+.env
+.env.*
